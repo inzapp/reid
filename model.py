@@ -33,23 +33,18 @@ class Model:
         x = self.__conv_block(input_layer, 16, 3)
         x = self.__max_pool(x)
 
-        x = self.__dropout(x, 0.1)
         x = self.__conv_block(x, 32, 3)
         x = self.__max_pool(x)
 
-        x = self.__dropout(x, 0.15)
         x = self.__conv_block(x, 64, 3)
         x = self.__max_pool(x)
 
-        x = self.__dropout(x, 0.2)
         x = self.__conv_block(x, 128, 3)
         x = self.__max_pool(x)
 
-        x = self.__dropout(x, 0.25)
         x = self.__conv_block(x, 256, 3)
         x = self.__max_pool(x)
 
-        x = self.__dropout(x, 0.3)
         x = self.__conv_block(x, 256, 3)
         output_layer = self.__output_layer(x)
         return tf.keras.models.Model(input_layer, output_layer)
@@ -79,8 +74,4 @@ class Model:
 
     def __max_pool(self, x):
         return tf.keras.layers.MaxPool2D()(x)
-
-    @staticmethod
-    def __dropout(x, rate):
-        return tf.keras.layers.Dropout(rate)(x)
 
