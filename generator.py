@@ -26,18 +26,20 @@ from concurrent.futures.thread import ThreadPoolExecutor
 
 
 class DataGenerator:
-    def __init__(self, image_paths_of, input_shape, batch_size, augmentation=True):
+    def __init__(self, image_paths_of, input_shape, batch_size, validation=False):
         self.image_paths_of = image_paths_of
         self.input_shape = input_shape
         self.input_shape_1ch = input_shape[:2] + (1,)
         self.batch_size = batch_size
-        self.augmentation = augmentation
+        self.validation = validation
         self.class_names = list(image_paths_of.keys())
         self.img_index_of = dict()
         self.img_count_of = dict()
         self.excepted_class_names_of = dict()
         self.class_names_for_balancing = []  # for data balancing
         self.class_name_index_for_balancing = 0
+        if self.validation:
+            np.random.seed(0)
         for class_name in self.class_names:
             self.img_index_of[class_name] = 0
             self.img_count_of[class_name] = len(self.image_paths_of[class_name])
@@ -56,6 +58,9 @@ class DataGenerator:
             # TODO : Rotate
         ])
 
+    def __len__(self):
+        return int(np.floor(len(self.class_names_for_balancing) / self.batch_size))
+
     def load(self):
         fs = []
         for _ in range(self.batch_size):
@@ -72,7 +77,7 @@ class DataGenerator:
         batch_y = []
         for f in fs:
             img_a, img_b, target = f.result()
-            if self.augmentation:
+            if not self.validation:
                 img_a = self.transform(image=img_a)['image']
                 img_b = self.transform(image=img_b)['image']
             img_a = cv2.resize(img_a, (self.input_shape[1], self.input_shape[0]))

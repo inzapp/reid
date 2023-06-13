@@ -79,20 +79,11 @@ class ReID:
             image_paths_of=self.train_image_paths_of,
             input_shape=self.input_shape,
             batch_size=self.batch_size)
-        self.validation_data_generator = DataGenerator(
-            image_paths_of=self.validation_image_paths_of,
-            input_shape=self.input_shape,
-            batch_size=self.batch_size)
-        self.train_data_generator_one_batch = DataGenerator(
-            image_paths_of=self.train_image_paths_of,
-            input_shape=self.input_shape,
-            batch_size=1,
-            augmentation=False)
         self.validation_data_generator_one_batch = DataGenerator(
             image_paths_of=self.validation_image_paths_of,
             input_shape=self.input_shape,
             batch_size=1,
-            augmentation=False)
+            validation=True)
 
         if pretrained_model_path != '':
             if os.path.exists(pretrained_model_path) and os.path.isfile(pretrained_model_path):
@@ -183,10 +174,10 @@ class ReID:
 
     def save_model(self, iteration_count):
         print(f'iteration count : {iteration_count}')
-        if self.validation_data_generator is None:
+        if self.validation_data_generator_one_batch is None:
             self.model.save(f'{self.checkpoint_path}/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
         else:
-            val_acc, same_avg_score, diff_avg_score = self.evaluate_core(confidence_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
+            val_acc, same_avg_score, diff_avg_score = self.evaluate_core(confidence_threshold=0.5, data_generator=self.validation_data_generator_one_batch)
             model_name = f'{self.model_name}_{iteration_count}_iter_acc_{val_acc:.4f}_same_score_{same_avg_score:.4f}_diff_score_{diff_avg_score:.4f}'
             if val_acc > self.max_val_acc:
                 self.max_val_acc = val_acc
@@ -197,9 +188,9 @@ class ReID:
             self.model.save(model_name, include_optimizer=False)
 
     def evaluate(self, confidence_threshold=0.5):
-        self.evaluate_core(confidence_threshold=confidence_threshold, validation_data_generator=self.validation_data_generator_one_batch)
+        self.evaluate_core(confidence_threshold=confidence_threshold, data_generator=self.validation_data_generator_one_batch)
 
-    def evaluate_core(self, confidence_threshold=0.5, validation_data_generator=None):
+    def evaluate_core(self, confidence_threshold=0.5, data_generator=None):
         @tf.function
         def predict(model, x):
             return model(x, training=False)
@@ -209,8 +200,8 @@ class ReID:
         total_diff_count = 0
         same_hit_score_sum = 0.0
         diff_hit_score_sum = 0.0
-        for _ in range(300):  # TODO : iterate generator
-            batch_x, batch_y = validation_data_generator.load()
+        for _ in tqdm(range(len(data_generator))):
+            batch_x, batch_y = data_generator.load()
             y = predict(self.model, batch_x)[0]
             score = y[0]
             if batch_y[0][0] == 1.0:  # same case
@@ -223,8 +214,7 @@ class ReID:
                 if score < confidence_threshold:
                     diff_hit_count += 1
                     diff_hit_score_sum += score
-
-        print('\n')
+        print()
         same_acc = same_hit_count / (float(total_same_count) + 1e-5)
         diff_acc = diff_hit_count / (float(total_diff_count) + 1e-5)
         same_avg_score = same_hit_score_sum / (float(total_same_count) + 1e-5)
