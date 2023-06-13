@@ -183,12 +183,11 @@ class ReID:
 
     def save_model(self, iteration_count):
         print(f'iteration count : {iteration_count}')
-        if self.validation_data_generator.flow() is None:
+        if self.validation_data_generator is None:
             self.model.save(f'{self.checkpoint_path}/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
         else:
-            # self.evaluate_core(confidence_threshold=0.5, validation_data_generator=self.train_data_generator_one_batch)
-            val_acc, val_class_score = self.evaluate_core(confidence_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
-            model_name = f'{self.model_name}_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
+            val_acc, same_avg_score, diff_avg_score = self.evaluate_core(confidence_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
+            model_name = f'{self.model_name}_{iteration_count}_iter_acc_{val_acc:.4f}_same_score_{same_avg_score:.4f}_diff_score_{diff_avg_score:.4f}'
             if val_acc > self.max_val_acc:
                 self.max_val_acc = val_acc
                 model_name = f'{self.checkpoint_path}/best_{model_name}.h5'
@@ -204,42 +203,35 @@ class ReID:
         @tf.function
         def predict(model, x):
             return model(x, training=False)
-        num_classes = self.model.output_shape[1]
-        hit_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
-        total_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
-        hit_unknown_count = total_unknown_count = 0
-        hit_scores = np.zeros(shape=(num_classes,), dtype=np.float32)
-        unknown_score_sum = 0.0
-        for batch_x, batch_y in tqdm(validation_data_generator.flow()):
+        same_hit_count = 0
+        diff_hit_count = 0
+        total_same_count = 0
+        total_diff_count = 0
+        same_hit_score_sum = 0.0
+        diff_hit_score_sum = 0.0
+        for _ in range(300):  # TODO : iterate generator
+            batch_x, batch_y = validation_data_generator.load()
             y = predict(self.model, batch_x)[0]
-            max_score_index = np.argmax(y)
-            max_score = y[max_score_index]
-            if np.sum(batch_y[0]) == 0.0:  # case unknown using zero label
-                total_unknown_count += 1
-                if max_score < confidence_threshold:
-                    hit_unknown_count += 1
-                    unknown_score_sum += max_score
-            else:  # case classification
-                true_class_index = np.argmax(batch_y[0])
-                total_counts[true_class_index] += 1
-                if max_score_index == true_class_index:
-                    hit_counts[true_class_index] += 1
-                    hit_scores[true_class_index] += max_score
+            score = y[0]
+            if batch_y[0][0] == 1.0:  # same case
+                total_same_count += 1
+                if score >= confidence_threshold:
+                    same_hit_count += 1
+                    same_hit_score_sum += score
+            elif batch_y[0][0] == 0.0:  # diff case
+                total_diff_count += 1
+                if score < confidence_threshold:
+                    diff_hit_count += 1
+                    diff_hit_score_sum += score
 
         print('\n')
-        total_acc_sum = 0.0
-        class_score_sum = 0.0
-        for i in range(len(total_counts)):
-            cur_class_acc = hit_counts[i] / (float(total_counts[i]) + 1e-5)
-            cur_class_score = hit_scores[i] / (float(hit_counts[i]) + 1e-5)
-            total_acc_sum += cur_class_acc
-            class_score_sum += cur_class_score
-            print(f'[class {i:2d}] acc : {cur_class_acc:.4f}, score : {cur_class_score:.4f}')
-
-        valid_class_count = num_classes
-
-        class_acc = total_acc_sum / valid_class_count
-        class_score = class_score_sum / num_classes
-        print(f'reid classifier accuracy : {class_acc:.4f}, class_score : {class_score:.4f}')
-        return class_acc, class_score
+        same_acc = same_hit_count / (float(total_same_count) + 1e-5)
+        diff_acc = diff_hit_count / (float(total_diff_count) + 1e-5)
+        same_avg_score = same_hit_score_sum / (float(total_same_count) + 1e-5)
+        diff_avg_score = diff_hit_score_sum / (float(total_diff_count) + 1e-5)
+        total_acc = (same_hit_count + diff_hit_count) / (float(total_same_count) + float(total_diff_count) + 1e-5)
+        print(f'same acc : {same_acc:.4f}, score : {same_avg_score:.4f}')
+        print(f'diff acc : {diff_acc:.4f}, score : {diff_avg_score:.4f}')
+        print(f'reid acc : {total_acc:.4f}')
+        return total_acc, same_avg_score, diff_avg_score
 
