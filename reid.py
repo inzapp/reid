@@ -210,18 +210,18 @@ class ReID:
         for _ in tqdm(range(len(data_generator))):
             batch_x, batch_y = data_generator.load()
             y = predict(self.model, batch_x)
-            for i in range(data_generator.batch_size):
-                score = y[i][0]
-                if batch_y[i][0] == 1.0:  # same case
-                    total_same_count += 1
-                    if score >= confidence_threshold:
-                        same_hit_count += 1
-                        same_hit_score_sum += score
-                elif batch_y[i][0] == 0.0:  # diff case
-                    total_diff_count += 1
-                    if score < confidence_threshold:
-                        diff_hit_count += 1
-                        diff_hit_score_sum += score
+
+            batch_same_mask = np.where(batch_y == 1.0, 1.0, 0.0)
+            total_same_count += np.sum(batch_same_mask)
+            y_same_mask = np.where(y >= confidence_threshold, 1.0, 0.0)
+            same_hit_count += np.sum(y_same_mask * batch_same_mask)
+            same_hit_score_sum += np.sum(y * y_same_mask * batch_same_mask)
+
+            batch_diff_mask = np.where(batch_y == 0.0, 1.0, 0.0)
+            total_diff_count += np.sum(batch_diff_mask)
+            y_diff_mask = np.where(y < confidence_threshold, 1.0, 0.0)
+            diff_hit_count += np.sum(y_diff_mask * batch_diff_mask)
+            diff_hit_score_sum += np.sum(y * y_diff_mask * batch_diff_mask)
         print()
         same_acc = same_hit_count / (float(total_same_count) + 1e-5)
         diff_acc = diff_hit_count / (float(total_diff_count) + 1e-5)
