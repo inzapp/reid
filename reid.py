@@ -110,7 +110,7 @@ class ReIDTrainer:
 
     def _load_model(self, path):
         if path == "auto":
-            candidates = sorted(Path("checkpoint").glob("*/last_*_iter.keras"),
+            candidates = sorted(Path("checkpoint").glob("*/last_*_iter.h5"),
                                 key=lambda item: item.stat().st_mtime)
             if not candidates:
                 raise FileNotFoundError("no automatic checkpoint found")
@@ -182,8 +182,8 @@ class ReIDTrainer:
     def _save(self, iteration, best=False, loss=None):
         prefix = "best" if best else "last"
         suffix = f"_loss_{loss:.4f}" if loss is not None else ""
-        path = self.checkpoint_path / f"{prefix}_{iteration}_iter{suffix}.keras"
-        for old in self.checkpoint_path.glob(f"{prefix}_*.keras"):
+        path = self.checkpoint_path / f"{prefix}_{iteration}_iter{suffix}.h5"
+        for old in self.checkpoint_path.glob(f"{prefix}_*.h5"):
             shutil.rmtree(old) if old.is_dir() else old.unlink()
         self.model.save(path, include_optimizer=False)
         # Save again in case runtime config changed (e.g. resolved auto checkpoint).

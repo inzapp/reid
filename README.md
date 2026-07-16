@@ -18,4 +18,5 @@ identity. The model emits an L2-normalized `embedding_dim` vector and optimizes
 `max(d(anchor, positive) - d(anchor, negative) + distance_margin, 0)`.
 
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
-including `embedding_dim` and `distance_margin`.
+including `embedding_dim` and `distance_margin`. Models are saved in the HDF5
+format with the `.h5` extension.
