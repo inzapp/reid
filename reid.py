@@ -1,235 +1,236 @@
-"""
-Authors : inzapp
+"""ReID training configuration and triplet-loss training loop."""
 
-Github url : https://github.com/inzapp/reid
-
-Copyright 2021 inzapp Authors. All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"),
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
 import os
-import cv2
+os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
 import random
+import re
+import shutil
+from pathlib import Path
+
 import numpy as np
 import tensorflow as tf
+import yaml
 
-from glob import glob
-from tqdm import tqdm
+from data_loader import DataLoader
 from model import Model
-from generator import DataGenerator
-from lr_scheduler import LRScheduler
-from ale import AbsoluteLogarithmicError
 
 
-class ReID:
-    def __init__(self,
-                 train_image_path,
-                 input_rows,
-                 input_cols,
-                 lr,
-                 momentum,
-                 label_smoothing,
-                 batch_size,
-                 iterations,
-                 gamma=2.0,
-                 warm_up=0.5,
-                 lr_policy='step',
-                 model_name='model',
-                 checkpoint_interval=0,
-                 pretrained_model_path='',
-                 validation_image_path=''):
-        self.input_shape = (input_rows, input_cols, 3)
-        self.lr = lr
-        self.warm_up = warm_up
-        self.gamma = gamma
-        self.momentum = momentum
-        self.label_smoothing = label_smoothing
-        self.batch_size = batch_size
-        self.iterations = iterations
-        self.lr_policy = lr_policy 
-        self.model_name = model_name
-        self.max_val_acc = 0.0
-        self.checkpoint_interval = checkpoint_interval
-        self.pretrained_iteration_count = 0
-        self.checkpoint_path = 'checkpoint'
+class TrainingConfig:
+    DEFAULTS = {
+        "devices": [], "pretrained_model_path": None, "model_name": "reid",
+        "optimizer": "adam", "lr_policy": "cosine", "lrf": 0.05,
+        "l2": 0.0005, "warm_up": 1000, "momentum": 0.9,
+        "max_q_size": 256, "num_loader_workers": 4,
+        "checkpoint_interval": 2000, "fix_seed": False,
+        "embedding_dim": 512, "distance_margin": 0.3,
+        "horizontal_flip_probability": 0.5,
+        "random_erasing_probability": 0.5, "color_jitter": 0.15,
+        "random_crop_padding": 10,
+    }
+    REQUIRED = ("train_data_path", "validation_data_path", "input_rows",
+                "input_cols", "input_channels", "lr", "batch_size", "iterations")
 
-        train_image_path = self.unify_path(train_image_path)
-        validation_image_path = self.unify_path(validation_image_path)
+    def __init__(self, cfg_path):
+        self.cfg_path = str(cfg_path)
+        with open(cfg_path, "r", encoding="utf-8") as stream:
+            loaded = yaml.safe_load(stream) or {}
+        missing = [key for key in self.REQUIRED if key not in loaded]
+        if missing:
+            raise ValueError("missing required config keys: " + ", ".join(missing))
+        self._data = {**self.DEFAULTS, **loaded}
+        for key, value in self._data.items():
+            setattr(self, key, value)
+        self._validate()
 
-        self.train_image_paths_of, self.train_image_count = self.init_image_paths_of(train_image_path)
-        self.validation_image_paths_of, self.validation_image_count = self.init_image_paths_of(validation_image_path)
-        if self.train_image_count == 0:
-            print(f'no images in train_image_path : {train_image_path}')
-            exit(0)
-        if self.validation_image_count == 0:
-            print(f'no images in validation_image_path : {validation_image_path}')
-            exit(0)
+    def _validate(self):
+        if self.input_channels not in (1, 3):
+            raise ValueError("input_channels must be 1 or 3")
+        if self.embedding_dim <= 0 or self.distance_margin <= 0:
+            raise ValueError("embedding_dim and distance_margin must be positive")
+        if self.batch_size <= 0 or self.max_q_size < self.batch_size:
+            raise ValueError("max_q_size must be greater than or equal to batch_size")
 
-        self.train_data_generator = DataGenerator(
-            image_paths_of=self.train_image_paths_of,
-            input_shape=self.input_shape,
-            batch_size=self.batch_size)
-        self.validation_data_generator = DataGenerator(
-            image_paths_of=self.validation_image_paths_of,
-            input_shape=self.input_shape,
-            batch_size=self.get_zero_mod_batch_size(self.validation_image_count),
-            validation=True)
+    def set_config(self, key, value):
+        self._data[key] = value
+        setattr(self, key, value)
 
-        if pretrained_model_path != '':
-            if os.path.exists(pretrained_model_path) and os.path.isfile(pretrained_model_path):
-                self.pretrained_iteration_count = self.parse_pretrained_iteration_count(pretrained_model_path)
-                self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
-            else:
-                print(f'pretrained model not found : {pretrained_model_path}')
-                exit(0)
+    def save(self, path):
+        with open(path, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(self._data, stream, sort_keys=False)
+
+    def print_cfg(self):
+        print(yaml.safe_dump(self._data, sort_keys=False))
+
+
+class ReIDTrainer:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        if cfg.fix_seed:
+            random.seed(42)
+            np.random.seed(42)
+            tf.random.set_seed(42)
+
+        self.strategy = self._get_strategy(cfg.devices)
+        self.optimizer = self._get_optimizer()
+        self.start_iteration = 0
+        if cfg.pretrained_model_path:
+            self.model = self._load_model(cfg.pretrained_model_path)
         else:
-            self.model = Model(input_shape=self.input_shape).build()
-            self.model.save('model.h5', include_optimizer=False)
+            self.model = Model(cfg).build(self.strategy, self.optimizer)
+        self.train_loader = DataLoader(cfg, training=True)
+        self.validation_loader = DataLoader(cfg, training=False)
+        self.checkpoint_path = None
+        self.best_loss = np.inf
 
-    def get_zero_mod_batch_size(self, image_paths_length):
-        zero_mod_batch_size = 1
-        for i in range(1, 256, 1):
-            if image_paths_length % i == 0:
-                zero_mod_batch_size = i
-        return zero_mod_batch_size
+    @staticmethod
+    def _get_strategy(devices):
+        if not devices:
+            tf.config.set_visible_devices([], "GPU")
+            return tf.distribute.get_strategy()
+        physical = tf.config.list_physical_devices("GPU")
+        invalid = [index for index in devices if index >= len(physical)]
+        if invalid:
+            raise ValueError(f"invalid GPU indices {invalid}; found {len(physical)} GPUs")
+        tf.config.set_visible_devices([physical[index] for index in devices], "GPU")
+        if len(devices) == 1:
+            return tf.distribute.get_strategy()
+        return tf.distribute.MirroredStrategy()
 
-    def parse_pretrained_iteration_count(self, pretrained_model_path):
-        iteration_count = 0
-        sp = f'{os.path.basename(pretrained_model_path)[:-3]}'.split('_')
-        for i in range(len(sp)):
-            if sp[i] == 'iter' and i > 0:
-                try:
-                    iteration_count = int(sp[i-1])
-                except:
-                    pass
-                break
-        return iteration_count
+    def _get_optimizer(self):
+        initial_lr = self.cfg.lr if self.cfg.lr_policy == "constant" else 0.0
+        with self.strategy.scope():
+            if self.cfg.optimizer.lower() == "sgd":
+                return tf.keras.optimizers.SGD(initial_lr, momentum=self.cfg.momentum,
+                                               nesterov=True)
+            if self.cfg.optimizer.lower() == "adam":
+                return tf.keras.optimizers.Adam(initial_lr, beta_1=self.cfg.momentum)
+        raise ValueError("optimizer must be 'sgd' or 'adam'")
 
-    def unify_path(self, path):
-        if path == '':
-            return path
-        path = path.replace('\\', '/')
-        if path.endswith('/'):
-            path = path[:-1]
-        return path
+    def _load_model(self, path):
+        if path == "auto":
+            candidates = sorted(Path("checkpoint").glob("*/last_*_iter.keras"),
+                                key=lambda item: item.stat().st_mtime)
+            if not candidates:
+                raise FileNotFoundError("no automatic checkpoint found")
+            path = str(candidates[-1])
+            self.cfg.set_config("pretrained_model_path", path)
+        with self.strategy.scope():
+            model = tf.keras.models.load_model(path, compile=False)
+            model.compile(optimizer=self.optimizer)
+        if model.output_shape[-1] != self.cfg.embedding_dim:
+            raise ValueError("checkpoint embedding dimension does not match cfg.yaml")
+        match = re.search(r"_(\d+)_iter", os.path.basename(path))
+        self.start_iteration = int(match.group(1)) if match else 0
+        return model
 
-    def init_image_paths_of(self, image_path):
-        dir_path_candidates = sorted(glob(f'{image_path}/*'))
-        for i in range(len(dir_path_candidates)):
-            dir_path_candidates[i] = dir_path_candidates[i].replace('\\', '/')
-        dir_paths = []
-        for candidate in dir_path_candidates:
-            basename = os.path.basename(candidate)
-            if basename[0] != '_' and os.path.isdir(candidate) and len(glob(f'{candidate}/*.jpg')) > 0:
-                dir_paths.append(candidate)
-        image_count = 0
-        image_paths_of = dict()
-        for dir_path in dir_paths:
-            basename = os.path.basename(dir_path)
-            image_paths_of[basename] = glob(f'{dir_path}/*.jpg')
-            image_count += len(image_paths_of[basename])
-        return image_paths_of, image_count
+    @staticmethod
+    def _distances(anchor_embedding, positive_embedding, negative_embedding):
+        positive = tf.norm(anchor_embedding - positive_embedding, axis=1)
+        negative = tf.norm(anchor_embedding - negative_embedding, axis=1)
+        return positive, negative
 
     @tf.function
-    def compute_gradient(self, model, optimizer, batch_x, y_true, loss_function):
+    def _train_step(self, anchor, positive, negative):
         with tf.GradientTape() as tape:
-            y_pred = self.model(batch_x, training=True)
-            loss = tf.reduce_mean(loss_function(y_true, y_pred))
-        gradients = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return loss
+            # Three calls share weights while keeping each role explicit.
+            anchor_embedding = self.model(anchor, training=True)
+            positive_embedding = self.model(positive, training=True)
+            negative_embedding = self.model(negative, training=True)
+            positive_distance, negative_distance = self._distances(
+                anchor_embedding, positive_embedding, negative_embedding)
+            triplet_loss = tf.reduce_mean(tf.maximum(
+                positive_distance - negative_distance + self.cfg.distance_margin, 0.0))
+            regularization = (tf.add_n(self.model.losses)
+                              if self.model.losses else tf.constant(0.0))
+            loss = triplet_loss + regularization
+        gradients = tape.gradient(loss, self.model.trainable_variables)
+        self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
+        return loss, tf.reduce_mean(positive_distance), tf.reduce_mean(negative_distance)
 
-    def fit(self):
-        self.model.summary()
-        optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr, beta_1=self.momentum)
-        if not (os.path.exists(self.checkpoint_path) and os.path.exists(self.checkpoint_path)):
-            os.makedirs(self.checkpoint_path, exist_ok=True)
-
-        iteration_count = self.pretrained_iteration_count
-        print(f'\ntrain on {self.train_image_count} samples')
-        print(f'validate on {self.validation_image_count} samples\n')
-        loss_function = AbsoluteLogarithmicError(gamma=self.gamma, label_smoothing=self.label_smoothing)
-        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
-        while True:
-            batch_x, batch_y = self.train_data_generator.load()
-            lr_scheduler.update(optimizer, iteration_count)
-            loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, loss_function)
-            iteration_count += 1
-            print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
-            if iteration_count % 2000 == 0:
-                for last_model_path in glob(f'{self.checkpoint_path}/model_last_*_iter.h5'):
-                    os.remove(last_model_path)
-                self.model.save(f'{self.checkpoint_path}/model_last_{iteration_count}_iter.h5', include_optimizer=False)
-            if iteration_count == self.iterations:
-                self.save_model(iteration_count)
-                for last_model_path in glob(f'{self.checkpoint_path}/model_last_*_iter.h5'):
-                    os.remove(last_model_path)
-                print('train end successfully')
-                exit(0)
-            elif iteration_count >= int(self.iterations * self.warm_up) and self.checkpoint_interval > 0 and iteration_count % self.checkpoint_interval == 0:
-                self.save_model(iteration_count)
-
-    def save_model(self, iteration_count):
-        print(f'iteration count : {iteration_count}')
-        if self.validation_data_generator is None:
-            self.model.save(f'{self.checkpoint_path}/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
+    def _set_learning_rate(self, iteration):
+        warm_up = (int(self.cfg.iterations * self.cfg.warm_up)
+                   if isinstance(self.cfg.warm_up, float) and self.cfg.warm_up <= 1.0
+                   else int(self.cfg.warm_up))
+        if warm_up and iteration < warm_up:
+            lr = self.cfg.lr * (iteration + 1) / warm_up
+        elif self.cfg.lr_policy == "constant":
+            lr = self.cfg.lr
+        elif self.cfg.lr_policy == "step":
+            fraction = iteration / self.cfg.iterations
+            lr = self.cfg.lr * (self.cfg.lrf ** (1 if fraction >= 0.8 else 0))
+        elif self.cfg.lr_policy == "cosine":
+            progress = (iteration - warm_up) / max(1, self.cfg.iterations - warm_up)
+            cosine = 0.5 * (1.0 + np.cos(np.pi * np.clip(progress, 0.0, 1.0)))
+            lr = self.cfg.lr * (self.cfg.lrf + (1.0 - self.cfg.lrf) * cosine)
         else:
-            val_acc, same_avg_score, diff_avg_score = self.evaluate_core(confidence_threshold=0.5, data_generator=self.validation_data_generator)
-            model_name = f'{self.model_name}_{iteration_count}_iter_acc_{val_acc:.4f}_same_score_{same_avg_score:.4f}_diff_score_{diff_avg_score:.4f}'
-            if val_acc > self.max_val_acc:
-                self.max_val_acc = val_acc
-                model_name = f'{self.checkpoint_path}/best_{model_name}.h5'
-                print(f'[best model saved]\n')
-            else:
-                model_name = f'{self.checkpoint_path}/{model_name}.h5'
-            self.model.save(model_name, include_optimizer=False)
+            raise ValueError("lr_policy must be constant, step, or cosine")
+        self.optimizer.learning_rate.assign(lr)
 
-    def evaluate(self, confidence_threshold=0.5):
-        self.evaluate_core(confidence_threshold=confidence_threshold, data_generator=self.validation_data_generator)
+    def _init_checkpoint_dir(self):
+        root = Path("checkpoint")
+        candidate = root / self.cfg.model_name
+        index = 1
+        while candidate.exists():
+            candidate = root / f"{self.cfg.model_name}_{index}"
+            index += 1
+        candidate.mkdir(parents=True)
+        self.checkpoint_path = candidate
+        self.cfg.save(candidate / "cfg.yaml")
 
-    def evaluate_core(self, confidence_threshold=0.5, data_generator=None):
-        @tf.function
-        def predict(model, x):
-            return model(x, training=False)
-        same_hit_count = 0
-        diff_hit_count = 0
-        total_same_count = 0
-        total_diff_count = 0
-        same_hit_score_sum = 0.0
-        diff_hit_score_sum = 0.0
-        for _ in tqdm(range(len(data_generator))):
-            batch_x, batch_y = data_generator.load()
-            y = predict(self.model, batch_x)
+    def _save(self, iteration, best=False, loss=None):
+        prefix = "best" if best else "last"
+        suffix = f"_loss_{loss:.4f}" if loss is not None else ""
+        path = self.checkpoint_path / f"{prefix}_{iteration}_iter{suffix}.keras"
+        for old in self.checkpoint_path.glob(f"{prefix}_*.keras"):
+            shutil.rmtree(old) if old.is_dir() else old.unlink()
+        self.model.save(path, include_optimizer=False)
+        # Save again in case runtime config changed (e.g. resolved auto checkpoint).
+        self.cfg.save(self.checkpoint_path / "cfg.yaml")
+        return path
 
-            batch_same_mask = np.where(batch_y == 1.0, 1.0, 0.0)
-            total_same_count += np.sum(batch_same_mask)
-            y_same_mask = np.where(y >= confidence_threshold, 1.0, 0.0)
-            same_hit_count += np.sum(y_same_mask * batch_same_mask)
-            same_hit_score_sum += np.sum(y * y_same_mask * batch_same_mask)
+    def evaluate(self, triplet_count=None):
+        count = triplet_count or max(self.cfg.batch_size, 128)
+        triplets = self.validation_loader.sample_validation_triplets(count)
+        losses, positive_distances, negative_distances = [], [], []
+        for start in range(0, len(triplets), self.cfg.batch_size):
+            batch = triplets[start:start + self.cfg.batch_size]
+            anchor, positive, negative = (np.stack(items) for items in zip(*batch))
+            ae = self.model(anchor, training=False)
+            pe = self.model(positive, training=False)
+            ne = self.model(negative, training=False)
+            dp, dn = self._distances(ae, pe, ne)
+            losses.extend(tf.maximum(dp - dn + self.cfg.distance_margin, 0.0).numpy())
+            positive_distances.extend(dp.numpy())
+            negative_distances.extend(dn.numpy())
+        return (float(np.mean(losses)), float(np.mean(positive_distances)),
+                float(np.mean(negative_distances)))
 
-            batch_diff_mask = np.where(batch_y == 0.0, 1.0, 0.0)
-            total_diff_count += np.sum(batch_diff_mask)
-            y_diff_mask = np.where(y < confidence_threshold, 1.0, 0.0)
-            diff_hit_count += np.sum(y_diff_mask * batch_diff_mask)
-            diff_hit_score_sum += np.sum(y * y_diff_mask * batch_diff_mask)
-        print()
-        same_acc = same_hit_count / (float(total_same_count) + 1e-5)
-        diff_acc = diff_hit_count / (float(total_diff_count) + 1e-5)
-        same_avg_score = same_hit_score_sum / (float(total_same_count) + 1e-5)
-        diff_avg_score = diff_hit_score_sum / (float(total_diff_count) + 1e-5)
-        total_acc = (same_hit_count + diff_hit_count) / (float(total_same_count) + float(total_diff_count) + 1e-5)
-        print(f'same acc : {same_acc:.4f}, score : {same_avg_score:.4f}')
-        print(f'diff acc : {diff_acc:.4f}, score : {diff_avg_score:.4f}')
-        print(f'reid acc : {total_acc:.4f}')
-        return total_acc, same_avg_score, diff_avg_score
-
+    def train(self):
+        self.model.summary()
+        self.cfg.print_cfg()
+        print(f"train: {len(self.train_loader.data_paths)} images, "
+              f"{len(self.train_loader.identities)} identities")
+        self._init_checkpoint_dir()
+        self.train_loader.start()
+        try:
+            for iteration in range(self.start_iteration, self.cfg.iterations):
+                self._set_learning_rate(iteration)
+                anchor, positive, negative = self.train_loader.load()
+                loss, dp, dn = self._train_step(anchor, positive, negative)
+                current = iteration + 1
+                print(f"\r[{current}/{self.cfg.iterations}] loss={loss:.4f} "
+                      f"d_pos={dp:.4f} d_neg={dn:.4f}", end="", flush=True)
+                if current % 2000 == 0 or current == self.cfg.iterations:
+                    self._save(current)
+                if current % self.cfg.checkpoint_interval == 0:
+                    validation_loss, val_dp, val_dn = self.evaluate()
+                    print(f"\nvalidation loss={validation_loss:.4f} "
+                          f"d_pos={val_dp:.4f} d_neg={val_dn:.4f}")
+                    if validation_loss < self.best_loss:
+                        self.best_loss = validation_loss
+                        self._save(current, best=True, loss=validation_loss)
+        finally:
+            self.train_loader.stop()
+        print("\ntraining completed")

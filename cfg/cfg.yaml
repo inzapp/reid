@@ -1,0 +1,33 @@
+devices: [0]
+pretrained_model_path: null
+train_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_train
+validation_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_train
+
+input_rows: 64
+input_cols: 128
+input_channels: 3
+embedding_dim: 512
+distance_margin: 0.3
+
+model_name: reid
+optimizer: adam
+lr_policy: cosine
+lr: 0.0003
+lrf: 0.05
+l2: 0.0005
+warm_up: 1000
+momentum: 0.9
+
+# batch_size is the number of triplets consumed at each iteration.
+batch_size: 32
+max_q_size: 256
+num_loader_workers: 4
+iterations: 10000
+checkpoint_interval: 2000
+fix_seed: false
+
+# ReID augmentation parameters.
+horizontal_flip_probability: 0.5
+random_erasing_probability: 0.5
+color_jitter: 0.15
+random_crop_padding: 10
