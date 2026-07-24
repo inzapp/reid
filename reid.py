@@ -1,4 +1,4 @@
-"""ReID training configuration and triplet-loss training loop."""
+"""ReID training configuration and contrastive-loss training loop."""
 
 import os
 os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
@@ -131,6 +131,12 @@ class ReIDTrainer:
         negative = tf.norm(anchor_embedding - negative_embedding, axis=1)
         return positive, negative
 
+    def _contrastive_loss(self, positive_distance, negative_distance):
+        positive_loss = tf.square(positive_distance)
+        negative_loss = tf.square(tf.maximum(
+            self.cfg.distance_margin - negative_distance, 0.0))
+        return positive_loss + negative_loss
+
     @tf.function
     def _train_step(self, anchor, positive, negative):
         with tf.GradientTape() as tape:
@@ -138,13 +144,11 @@ class ReIDTrainer:
             anchor_embedding = self.model(anchor, training=True)
             positive_embedding = self.model(positive, training=True)
             negative_embedding = self.model(negative, training=True)
-            positive_distance, negative_distance = self._distances(
-                anchor_embedding, positive_embedding, negative_embedding)
-            triplet_loss = tf.reduce_mean(tf.maximum(
-                positive_distance - negative_distance + self.cfg.distance_margin, 0.0))
-            regularization = (tf.add_n(self.model.losses)
-                              if self.model.losses else tf.constant(0.0))
-            loss = triplet_loss + regularization
+            positive_distance, negative_distance = self._distances(anchor_embedding, positive_embedding, negative_embedding)
+            contrastive_loss = tf.reduce_mean(
+                self._contrastive_loss(positive_distance, negative_distance))
+            regularization = (tf.add_n(self.model.losses) if self.model.losses else tf.constant(0.0))
+            loss = contrastive_loss + regularization
         gradients = tape.gradient(loss, self.model.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
         return loss, tf.reduce_mean(positive_distance), tf.reduce_mean(negative_distance)
@@ -201,7 +205,7 @@ class ReIDTrainer:
             pe = self.model(positive, training=False)
             ne = self.model(negative, training=False)
             dp, dn = self._distances(ae, pe, ne)
-            losses.extend(tf.maximum(dp - dn + self.cfg.distance_margin, 0.0).numpy())
+            losses.extend(self._contrastive_loss(dp, dn).numpy())
             positive_distances.extend(dp.numpy())
             negative_distances.extend(dn.numpy())
         return (float(np.mean(losses)), float(np.mean(positive_distances)),

@@ -15,7 +15,9 @@ python train.py --cfg cfg/cfg.yaml
 `batch_size` is the number of triplets per iteration. Each triplet contains two
 different images of one randomly sampled identity and one image of a different
 identity. The model emits an L2-normalized `embedding_dim` vector and optimizes
-`max(d(anchor, positive) - d(anchor, negative) + distance_margin, 0)`.
+`d(anchor, positive)^2 + max(distance_margin - d(anchor, negative), 0)^2`.
+This directly pulls positive pairs toward distance `0` and penalizes negative
+pairs only while their distance is below `distance_margin`.
 
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
 including `embedding_dim` and `distance_margin`. Models are saved in the HDF5
