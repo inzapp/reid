@@ -1,4 +1,4 @@
-"""Compact CNN that emits L2-normalized ReID embeddings."""
+"""Compact CNN that emits ReID embeddings."""
 
 import tensorflow as tf
 
@@ -24,12 +24,11 @@ class Model:
                                    kernel_regularizer=self._regularizer())(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.ReLU()(x)
-        x = tf.keras.layers.GlobalAveragePooling2D()(x)
         x = tf.keras.layers.Dropout(0.2)(x)
-        x = tf.keras.layers.Dense(
-            self.cfg.embedding_dim, use_bias=False,
-            kernel_regularizer=self._regularizer(), name="embedding_dense")(x)
-        outputs = tf.keras.layers.UnitNormalization(axis=1, name="embedding")(x)
+        x = tf.keras.layers.Conv2D(
+            self.cfg.embedding_dim, 1, use_bias=False,
+            kernel_regularizer=self._regularizer(), name="embedding_conv")(x)
+        outputs = tf.keras.layers.GlobalAveragePooling2D(name="embedding")(x)
         return tf.keras.Model(inputs, outputs, name="reid_model")
 
     def _residual_downsample(self, x, filters):
