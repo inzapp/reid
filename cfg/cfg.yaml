@@ -1,13 +1,16 @@
 devices: [0]
 pretrained_model_path: null
 train_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_train
-validation_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_train
+validation_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_test
 
 input_rows: 64
 input_cols: 128
 input_channels: 3
 embedding_dim: 512
 distance_margin: 0.3
+# Distances below this value are classified as the same object. If null,
+# distance_margin is used.
+verification_threshold: null
 
 model_name: reid
 optimizer: adam

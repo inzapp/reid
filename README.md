@@ -19,6 +19,17 @@ identity. The model emits an `embedding_dim` vector and optimizes
 This directly pulls positive pairs toward distance `0` and penalizes negative
 pairs only while their distance is below `distance_margin`.
 
+Validation reports distance-based verification metrics at
+`verification_threshold` (or `distance_margin` when it is null): TAR, FRR, TNR,
+FAR, and the fraction of triplets for which both the positive and negative are
+classified correctly. It also reports distance percentiles, ROC-AUC, EER, and
+TAR operating points at FAR 0.1% and 0.01%.
+
+Low-FAR measurements require a sufficiently large validation set. For example,
+measuring FAR 0.01% with non-zero false matches requires at least 10,000
+negative pairs; use a correspondingly large `--triplets` value when selecting
+an operating threshold.
+
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
 including `embedding_dim` and `distance_margin`. Models are saved in the HDF5
 format with the `.h5` extension.

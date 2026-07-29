@@ -14,6 +14,7 @@ import tensorflow as tf
 import yaml
 
 from data_loader import DataLoader
+from metrics import verification_metrics
 from model import Model
 
 
@@ -25,6 +26,7 @@ class TrainingConfig:
         "max_q_size": 256, "num_loader_workers": 4,
         "checkpoint_interval": 2000, "fix_seed": False,
         "embedding_dim": 512, "distance_margin": 0.3,
+        "verification_threshold": None,
         "horizontal_flip_probability": 0.5,
         "random_erasing_probability": 0.5, "color_jitter": 0.15,
         "random_crop_padding": 10,
@@ -49,6 +51,9 @@ class TrainingConfig:
             raise ValueError("input_channels must be 1 or 3")
         if self.embedding_dim <= 0 or self.distance_margin <= 0:
             raise ValueError("embedding_dim and distance_margin must be positive")
+        if (self.verification_threshold is not None
+                and self.verification_threshold <= 0):
+            raise ValueError("verification_threshold must be positive or null")
         if self.batch_size <= 0 or self.max_q_size < self.batch_size:
             raise ValueError("max_q_size must be greater than or equal to batch_size")
 
@@ -133,8 +138,7 @@ class ReIDTrainer:
 
     def _contrastive_loss(self, positive_distance, negative_distance):
         positive_loss = tf.square(positive_distance)
-        negative_loss = tf.square(tf.maximum(
-            self.cfg.distance_margin - negative_distance, 0.0))
+        negative_loss = tf.square(tf.maximum(self.cfg.distance_margin - negative_distance, 0.0))
         return positive_loss + negative_loss
 
     @tf.function
@@ -145,8 +149,7 @@ class ReIDTrainer:
             positive_embedding = self.model(positive, training=True)
             negative_embedding = self.model(negative, training=True)
             positive_distance, negative_distance = self._distances(anchor_embedding, positive_embedding, negative_embedding)
-            contrastive_loss = tf.reduce_mean(
-                self._contrastive_loss(positive_distance, negative_distance))
+            contrastive_loss = tf.reduce_mean(self._contrastive_loss(positive_distance, negative_distance))
             regularization = (tf.add_n(self.model.losses) if self.model.losses else tf.constant(0.0))
             loss = contrastive_loss + regularization
         gradients = tape.gradient(loss, self.model.trainable_variables)
@@ -208,8 +211,15 @@ class ReIDTrainer:
             losses.extend(self._contrastive_loss(dp, dn).numpy())
             positive_distances.extend(dp.numpy())
             negative_distances.extend(dn.numpy())
-        return (float(np.mean(losses)), float(np.mean(positive_distances)),
-                float(np.mean(negative_distances)))
+        positive_distances = np.asarray(positive_distances)
+        negative_distances = np.asarray(negative_distances)
+        threshold = (self.cfg.distance_margin
+                     if self.cfg.verification_threshold is None
+                     else self.cfg.verification_threshold)
+        metrics = verification_metrics(positive_distances, negative_distances,
+                                       threshold)
+        metrics["loss"] = float(np.mean(losses))
+        return metrics
 
     def train(self):
         self.model.summary()
@@ -229,9 +239,16 @@ class ReIDTrainer:
                 if current % 2000 == 0 or current == self.cfg.iterations:
                     self._save(current)
                 if current % self.cfg.checkpoint_interval == 0:
-                    validation_loss, val_dp, val_dn = self.evaluate()
+                    metrics = self.evaluate()
+                    validation_loss = metrics["loss"]
                     print(f"\nvalidation loss={validation_loss:.4f} "
-                          f"d_pos={val_dp:.4f} d_neg={val_dn:.4f}")
+                          f"d_pos={metrics['positive_mean_distance']:.4f} "
+                          f"d_neg={metrics['negative_mean_distance']:.4f} "
+                          f"TAR={metrics['tar']:.4f} FAR={metrics['far']:.4f} "
+                          f"threshold_acc={metrics['threshold_accuracy']:.4f} "
+                          f"AUC={metrics['roc_auc']:.4f} EER={metrics['eer']:.4f} "
+                          f"TAR@FAR0.1%={metrics['tar_at_far_0p1pct']:.4f} "
+                          f"TAR@FAR0.01%={metrics['tar_at_far_0p01pct']:.4f}")
                     if validation_loss < self.best_loss:
                         self.best_loss = validation_loss
                         self._save(current, best=True, loss=validation_loss)

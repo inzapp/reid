@@ -11,6 +11,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     cfg = TrainingConfig(args.cfg)
     cfg.set_config("pretrained_model_path", args.model)
-    loss, positive_distance, negative_distance = ReIDTrainer(cfg).evaluate(args.triplets)
-    print(f"loss={loss:.4f} d_pos={positive_distance:.4f} "
-          f"d_neg={negative_distance:.4f}")
+    metrics = ReIDTrainer(cfg).evaluate(args.triplets)
+    for name, value in metrics.items():
+        if value is not None:
+            print(f"{name}={value:.6f}")
