@@ -7,6 +7,7 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 import random
 import re
 import shutil
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,8 @@ class TrainingConfig:
         "l2": 0.0005, "warm_up": 1000, "momentum": 0.9,
         "max_q_size": 256, "num_loader_workers": 4,
         "checkpoint_interval": 2000, "fix_seed": False,
+        "validation_pair_count": 100000, "evaluation_batch_size": None,
+        "evaluation_pair_chunk_size": 8192,
         "embedding_dim": 512, "maximum_negative_distance": 2.0,
         "verification_threshold": None,
         "horizontal_flip_probability": 0.5,
@@ -57,6 +60,12 @@ class TrainingConfig:
             raise ValueError("verification_threshold must be positive or null")
         if self.batch_size <= 0 or self.max_q_size < self.batch_size:
             raise ValueError("max_q_size must be greater than or equal to batch_size")
+        if self.validation_pair_count <= 0:
+            raise ValueError("validation_pair_count must be positive")
+        if self.evaluation_batch_size is not None and self.evaluation_batch_size <= 0:
+            raise ValueError("evaluation_batch_size must be positive or null")
+        if self.evaluation_pair_chunk_size <= 0:
+            raise ValueError("evaluation_pair_chunk_size must be positive")
 
     def set_config(self, key, value):
         self._data[key] = value
@@ -200,24 +209,94 @@ class ReIDTrainer:
         self.cfg.save(self.checkpoint_path / "cfg.yaml")
         return path
 
+    def _validation_embeddings(self):
+        paths = self.validation_loader.data_paths
+        batch_size = self.cfg.evaluation_batch_size or self.cfg.batch_size
+        batches = []
+        for start in range(0, len(paths), batch_size):
+            images = np.stack([
+                self.validation_loader.load_image(path, augment=False)
+                for path in paths[start:start + batch_size]
+            ])
+            batches.append(self.model(images, training=False).numpy())
+        return np.concatenate(batches, axis=0)
+
+    def _sample_validation_indices(self, count):
+        paths = self.validation_loader.data_paths
+        indices_by_id = defaultdict(list)
+        indices_by_id_and_camera = defaultdict(lambda: defaultdict(list))
+        for index, path in enumerate(paths):
+            identity = self.validation_loader.identity_from_path(path)
+            camera = self.validation_loader.camera_from_path(path)
+            indices_by_id[identity].append(index)
+            indices_by_id_and_camera[identity][camera].append(index)
+
+        has_camera_metadata = any(
+            camera is not None
+            for cameras in indices_by_id_and_camera.values()
+            for camera in cameras)
+        if has_camera_metadata:
+            anchor_identities = [
+                identity for identity, cameras in indices_by_id_and_camera.items()
+                if len([camera for camera in cameras if camera is not None]) >= 2
+            ]
+        else:
+            anchor_identities = [
+                identity for identity, indices in indices_by_id.items()
+                if len(indices) >= 2
+            ]
+        identities = list(indices_by_id)
+        if not anchor_identities:
+            raise ValueError(
+                "validation requires an identity present in at least two cameras")
+
+        rng = random.Random(0)
+        anchor_indices = np.empty(count, dtype=np.int64)
+        positive_indices = np.empty(count, dtype=np.int64)
+        negative_indices = np.empty(count, dtype=np.int64)
+        for item in range(count):
+            anchor_id = rng.choice(anchor_identities)
+            if has_camera_metadata:
+                cameras = [camera for camera in indices_by_id_and_camera[anchor_id]
+                           if camera is not None]
+                anchor_camera, positive_camera = rng.sample(cameras, 2)
+                anchor_indices[item] = rng.choice(
+                    indices_by_id_and_camera[anchor_id][anchor_camera])
+                positive_indices[item] = rng.choice(
+                    indices_by_id_and_camera[anchor_id][positive_camera])
+            else:
+                anchor_indices[item], positive_indices[item] = rng.sample(
+                    indices_by_id[anchor_id], 2)
+
+            negative_id = rng.choice(identities)
+            while negative_id == anchor_id:
+                negative_id = rng.choice(identities)
+            negative_indices[item] = rng.choice(indices_by_id[negative_id])
+        return anchor_indices, positive_indices, negative_indices
+
     def evaluate(self, triplet_count=None):
-        count = triplet_count or max(self.cfg.batch_size, 128)
-        triplets = self.validation_loader.sample_validation_triplets(count)
-        losses, positive_distances, negative_distances = [], [], []
-        for start in range(0, len(triplets), self.cfg.batch_size):
-            batch = triplets[start:start + self.cfg.batch_size]
-            anchor, positive, negative = (np.stack(items) for items in zip(*batch))
-            ae = self.model(anchor, training=False)
-            pe = self.model(positive, training=False)
-            ne = self.model(negative, training=False)
-            dp, dn = self._distances(ae, pe, ne)
-            losses.extend(self._contrastive_loss(dp, dn).numpy())
-            positive_distances.extend(dp.numpy())
-            negative_distances.extend(dn.numpy())
-        positive_distances = np.asarray(positive_distances)
-        negative_distances = np.asarray(negative_distances)
+        count = triplet_count or self.cfg.validation_pair_count
+        embeddings = self._validation_embeddings()
+        anchor_indices, positive_indices, negative_indices = (
+            self._sample_validation_indices(count))
+        positive_distances = np.empty(count, dtype=np.float32)
+        negative_distances = np.empty(count, dtype=np.float32)
+        chunk_size = self.cfg.evaluation_pair_chunk_size
+        for start in range(0, count, chunk_size):
+            end = min(start + chunk_size, count)
+            anchor = embeddings[anchor_indices[start:end]]
+            positive = embeddings[positive_indices[start:end]]
+            negative = embeddings[negative_indices[start:end]]
+            positive_distances[start:end] = np.linalg.norm(
+                anchor - positive, axis=1)
+            negative_distances[start:end] = np.linalg.norm(
+                anchor - negative, axis=1)
+
         metrics = verification_metrics(positive_distances, negative_distances,
                                        self.cfg.verification_threshold)
+        losses = (np.square(positive_distances)
+                  - np.minimum(negative_distances,
+                               self.cfg.maximum_negative_distance))
         metrics["loss"] = float(np.mean(losses))
         return metrics
 
@@ -247,6 +326,7 @@ class ReIDTrainer:
                           f"TAR={metrics['tar']:.4f} FAR={metrics['far']:.4f} "
                           f"threshold_acc={metrics['threshold_accuracy']:.4f} "
                           f"AUC={metrics['roc_auc']:.4f} EER={metrics['eer']:.4f} "
+                          f"TAR@FAR1%={metrics['tar_at_far_1pct']:.4f} "
                           f"TAR@FAR0.1%={metrics['tar_at_far_0p1pct']:.4f} "
                           f"TAR@FAR0.01%={metrics['tar_at_far_0p01pct']:.4f}")
                     if validation_loss < self.best_loss:

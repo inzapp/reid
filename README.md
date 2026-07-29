@@ -29,12 +29,18 @@ Validation reports distance-based verification metrics at
 which both the positive and negative are classified correctly. When the value
 is null, the validation EER threshold is used for these diagnostic metrics. It
 also reports distance percentiles, ROC-AUC, EER, and TAR operating points at
-FAR 0.1% and 0.01%.
+FAR 1%, 0.1%, and 0.01%.
 
 Low-FAR measurements require a sufficiently large validation set. For example,
 measuring FAR 0.01% with non-zero false matches requires at least 10,000
 negative pairs; use a correspondingly large `--triplets` value when selecting
 an operating threshold.
+
+Evaluation embeds every validation image once in batches, then samples pair
+indices and computes distances in chunks. `validation_pair_count` can therefore
+be set to 100,000 or more without retaining triplet images in memory. When
+camera IDs such as `_c1` are present in filenames, positive pairs are sampled
+only across different cameras.
 
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
 including `embedding_dim` and `maximum_negative_distance`. Models are saved in

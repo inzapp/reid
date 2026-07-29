@@ -3,6 +3,7 @@
 import os
 import queue
 import random
+import re
 import threading
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -56,6 +57,11 @@ class DataLoader:
     @staticmethod
     def identity_from_path(path):
         return os.path.basename(path).split("_", 1)[0]
+
+    @staticmethod
+    def camera_from_path(path):
+        match = re.search(r"(?:^|_)c(\d+)", os.path.basename(path))
+        return int(match.group(1)) if match else None
 
     @classmethod
     def _has_valid_identity(cls, path):

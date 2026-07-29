@@ -40,21 +40,18 @@ def _equal_error_rate(positive_distances, negative_distances):
     candidates = np.concatenate((
         [float("-inf")], np.unique(np.concatenate(
             (positive_distances, negative_distances))), [float("inf")]))
-    best = None
-    for threshold in candidates:
-        tar = np.searchsorted(sorted_positives, threshold, side="left") / len(
-            sorted_positives)
-        far = np.searchsorted(sorted_negatives, threshold, side="left") / len(
-            sorted_negatives)
-        frr = 1.0 - tar
-        candidate = (abs(far - frr), (far + frr) / 2.0, float(threshold))
-        if best is None or candidate < best:
-            best = candidate
-    return best[1], best[2]
+    tar = np.searchsorted(sorted_positives, candidates, side="left") / len(
+        sorted_positives)
+    far = np.searchsorted(sorted_negatives, candidates, side="left") / len(
+        sorted_negatives)
+    frr = 1.0 - tar
+    eer = (far + frr) / 2.0
+    best = np.lexsort((candidates, eer, np.abs(far - frr)))[0]
+    return float(eer[best]), float(candidates[best])
 
 
 def verification_metrics(positive_distances, negative_distances, threshold,
-                         target_fars=(0.001, 0.0001)):
+                         target_fars=(0.01, 0.001, 0.0001)):
     """Calculate fixed-threshold and threshold-independent ReID metrics."""
     positive = np.asarray(positive_distances, dtype=np.float64).reshape(-1)
     negative = np.asarray(negative_distances, dtype=np.float64).reshape(-1)

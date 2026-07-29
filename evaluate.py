@@ -7,7 +7,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cfg", default="cfg.yaml")
     parser.add_argument("--model", required=True)
-    parser.add_argument("--triplets", type=int, default=512)
+    parser.add_argument("--triplets", type=int, default=None)
     args = parser.parse_args()
     cfg = TrainingConfig(args.cfg)
     cfg.set_config("pretrained_model_path", args.model)
