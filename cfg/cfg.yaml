@@ -7,15 +7,15 @@ input_rows: 64
 input_cols: 128
 input_channels: 3
 embedding_dim: 512
-distance_margin: 0.3
+maximum_negative_distance: 2.0
 # Distances below this value are classified as the same object. If null,
-# distance_margin is used.
+# the validation EER threshold is used for diagnostic TAR/FAR reporting.
 verification_threshold: null
 
 model_name: reid
 optimizer: adam
 lr_policy: cosine
-lr: 0.0003
+lr: 0.001
 lrf: 0.05
 l2: 0.0005
 warm_up: 1000

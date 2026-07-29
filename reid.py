@@ -25,7 +25,7 @@ class TrainingConfig:
         "l2": 0.0005, "warm_up": 1000, "momentum": 0.9,
         "max_q_size": 256, "num_loader_workers": 4,
         "checkpoint_interval": 2000, "fix_seed": False,
-        "embedding_dim": 512, "distance_margin": 0.3,
+        "embedding_dim": 512, "maximum_negative_distance": 2.0,
         "verification_threshold": None,
         "horizontal_flip_probability": 0.5,
         "random_erasing_probability": 0.5, "color_jitter": 0.15,
@@ -49,8 +49,9 @@ class TrainingConfig:
     def _validate(self):
         if self.input_channels not in (1, 3):
             raise ValueError("input_channels must be 1 or 3")
-        if self.embedding_dim <= 0 or self.distance_margin <= 0:
-            raise ValueError("embedding_dim and distance_margin must be positive")
+        if self.embedding_dim <= 0 or self.maximum_negative_distance <= 0:
+            raise ValueError(
+                "embedding_dim and maximum_negative_distance must be positive")
         if (self.verification_threshold is not None
                 and self.verification_threshold <= 0):
             raise ValueError("verification_threshold must be positive or null")
@@ -138,16 +139,18 @@ class ReIDTrainer:
 
     def _contrastive_loss(self, positive_distance, negative_distance):
         positive_loss = tf.square(positive_distance)
-        negative_loss = tf.square(tf.maximum(self.cfg.distance_margin - negative_distance, 0.0))
+        negative_loss = -tf.minimum(
+            negative_distance, self.cfg.maximum_negative_distance)
         return positive_loss + negative_loss
 
     @tf.function
     def _train_step(self, anchor, positive, negative):
         with tf.GradientTape() as tape:
-            # Three calls share weights while keeping each role explicit.
-            anchor_embedding = self.model(anchor, training=True)
-            positive_embedding = self.model(positive, training=True)
-            negative_embedding = self.model(negative, training=True)
+            # A single call gives all three roles the same BatchNorm statistics.
+            embeddings = self.model(
+                tf.concat((anchor, positive, negative), axis=0), training=True)
+            anchor_embedding, positive_embedding, negative_embedding = tf.split(
+                embeddings, 3, axis=0)
             positive_distance, negative_distance = self._distances(anchor_embedding, positive_embedding, negative_embedding)
             contrastive_loss = tf.reduce_mean(self._contrastive_loss(positive_distance, negative_distance))
             regularization = (tf.add_n(self.model.losses) if self.model.losses else tf.constant(0.0))
@@ -213,11 +216,8 @@ class ReIDTrainer:
             negative_distances.extend(dn.numpy())
         positive_distances = np.asarray(positive_distances)
         negative_distances = np.asarray(negative_distances)
-        threshold = (self.cfg.distance_margin
-                     if self.cfg.verification_threshold is None
-                     else self.cfg.verification_threshold)
         metrics = verification_metrics(positive_distances, negative_distances,
-                                       threshold)
+                                       self.cfg.verification_threshold)
         metrics["loss"] = float(np.mean(losses))
         return metrics
 

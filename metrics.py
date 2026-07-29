@@ -63,7 +63,10 @@ def verification_metrics(positive_distances, negative_distances, threshold,
     if not np.all(np.isfinite(positive)) or not np.all(np.isfinite(negative)):
         raise ValueError("distances must contain only finite values")
 
-    threshold = float(threshold)
+    eer, eer_threshold = _equal_error_rate(positive, negative)
+    # With no deployment threshold configured, use the empirical EER point for
+    # fixed-threshold diagnostic metrics. Low-FAR thresholds remain separate.
+    threshold = eer_threshold if threshold is None else float(threshold)
     tar, far = _rates(positive, negative, threshold)
     metrics = {
         "positive_mean_distance": float(np.mean(positive)),
@@ -80,7 +83,6 @@ def verification_metrics(positive_distances, negative_distances, threshold,
             if positive.size == negative.size else None,
         "roc_auc": _roc_auc(positive, negative),
     }
-    eer, eer_threshold = _equal_error_rate(positive, negative)
     metrics["eer"] = eer
     metrics["eer_threshold"] = eer_threshold
 

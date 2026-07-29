@@ -47,20 +47,20 @@ class DataLoader:
             raise ValueError(f"image directory does not exist: {root}")
         paths = sorted(str(path) for path in root.rglob("*")
                        if path.is_file() and path.suffix in IMAGE_SUFFIXES)
-        negative_id_count = sum(self._has_negative_identity(path)
-                                for path in paths)
+        invalid_id_count = sum(not self._has_valid_identity(path)
+                               for path in paths)
         split = "training" if self.training else "validation"
-        print(f"{split}: excluded {negative_id_count} images with negative IDs")
-        return [path for path in paths if not self._has_negative_identity(path)]
+        print(f"{split}: excluded {invalid_id_count} images with IDs below 1")
+        return [path for path in paths if self._has_valid_identity(path)]
 
     @staticmethod
     def identity_from_path(path):
         return os.path.basename(path).split("_", 1)[0]
 
     @classmethod
-    def _has_negative_identity(cls, path):
+    def _has_valid_identity(cls, path):
         try:
-            return int(cls.identity_from_path(path)) < 0
+            return int(cls.identity_from_path(path)) >= 1
         except ValueError:
             return False
 

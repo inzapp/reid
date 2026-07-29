@@ -15,15 +15,21 @@ python train.py --cfg cfg/cfg.yaml
 `batch_size` is the number of triplets per iteration. Each triplet contains two
 different images of one randomly sampled identity and one image of a different
 identity. The model emits an `embedding_dim` vector and optimizes
-`d(anchor, positive)^2 + max(distance_margin - d(anchor, negative), 0)^2`.
-This directly pulls positive pairs toward distance `0` and penalizes negative
-pairs only while their distance is below `distance_margin`.
+`d(anchor, positive)^2 - min(d(anchor, negative), maximum_negative_distance)`.
+This pulls positive pairs toward distance `0` and pushes negative pairs apart
+until their distance reaches `maximum_negative_distance`.
+
+The embedding head uses Batch Normalization followed by a constant
+`1/sqrt(embedding_dim)` rescaling. This keeps embedding scale stable and the
+distance cap meaningful using conversion-friendly standard operations, without
+per-vector L2 normalization.
 
 Validation reports distance-based verification metrics at
-`verification_threshold` (or `distance_margin` when it is null): TAR, FRR, TNR,
-FAR, and the fraction of triplets for which both the positive and negative are
-classified correctly. It also reports distance percentiles, ROC-AUC, EER, and
-TAR operating points at FAR 0.1% and 0.01%.
+`verification_threshold`: TAR, FRR, TNR, FAR, and the fraction of triplets for
+which both the positive and negative are classified correctly. When the value
+is null, the validation EER threshold is used for these diagnostic metrics. It
+also reports distance percentiles, ROC-AUC, EER, and TAR operating points at
+FAR 0.1% and 0.01%.
 
 Low-FAR measurements require a sufficiently large validation set. For example,
 measuring FAR 0.01% with non-zero false matches requires at least 10,000
@@ -31,5 +37,5 @@ negative pairs; use a correspondingly large `--triplets` value when selecting
 an operating threshold.
 
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
-including `embedding_dim` and `distance_margin`. Models are saved in the HDF5
-format with the `.h5` extension.
+including `embedding_dim` and `maximum_negative_distance`. Models are saved in
+the HDF5 format with the `.h5` extension.
