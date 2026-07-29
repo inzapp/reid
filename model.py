@@ -18,6 +18,7 @@ class Model:
         x = inputs
         for filters in (32, 64, 128, 256, 512):
             x = tf.keras.layers.Conv2D(filters, 3, strides=2, padding="same", use_bias=True, kernel_regularizer=self._regularizer())(x)
+            x = tf.keras.layers.LeakyReLU(alpha=0.1)(x)
         x = tf.keras.layers.Conv2D(self.cfg.embedding_dim, 1, use_bias=False, kernel_regularizer=self._regularizer(), name="embedding_conv")(x)
         outputs = tf.keras.layers.GlobalAveragePooling2D(name="embedding")(x)
         return tf.keras.Model(inputs, outputs, name="reid_model")
