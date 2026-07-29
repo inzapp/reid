@@ -1,7 +1,8 @@
 devices: [0]
 pretrained_model_path: null
-train_data_path: /home/inzapp/train_data/market1501/Market-1501-v15.09.15/bounding_box_train
-validation_data_path: /home/inzapp/train_data/market1501/Market-1501-v15.09.15/bounding_box_test
+train_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_train
+validation_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_test
+query_data_path: /train_data/market1501/Market-1501-v15.09.15/query
 
 input_rows: 64
 input_cols: 128
@@ -26,7 +27,7 @@ batch_size: 32
 max_q_size: 256
 num_loader_workers: 4
 iterations: 10000
-checkpoint_interval: 2000
+checkpoint_interval: 1000
 fix_seed: false
 
 # Validation images are embedded once; only sampled index distances are kept.

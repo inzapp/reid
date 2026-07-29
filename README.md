@@ -29,7 +29,7 @@ Validation reports distance-based verification metrics at
 which both the positive and negative are classified correctly. When the value
 is null, the validation EER threshold is used for these diagnostic metrics. It
 also reports distance percentiles, ROC-AUC, EER, and TAR operating points at
-FAR 1%, 0.1%, and 0.01%.
+FAR 10%, 5%, and 1%.
 
 Low-FAR measurements require a sufficiently large validation set. For example,
 measuring FAR 0.01% with non-zero false matches requires at least 10,000
@@ -41,6 +41,12 @@ indices and computes distances in chunks. `validation_pair_count` can therefore
 be set to 100,000 or more without retaining triplet images in memory. When
 camera IDs such as `_c1` are present in filenames, positive pairs are sampled
 only across different cameras.
+
+When `query_data_path` is configured, evaluation also reports the official
+Market-1501 Rank-1 score. Each query is searched against the validation gallery
+after excluding gallery images with the same identity and camera as the query.
+ID `0000` distractors remain in the Rank-1 gallery, while negative-ID junk is
+excluded; pair-verification metrics continue to use only IDs greater than zero.
 
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
 including `embedding_dim` and `maximum_negative_distance`. Models are saved in

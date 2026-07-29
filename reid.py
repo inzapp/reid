@@ -28,6 +28,7 @@ class TrainingConfig:
         "checkpoint_interval": 2000, "fix_seed": False,
         "validation_pair_count": 100000, "evaluation_batch_size": None,
         "evaluation_pair_chunk_size": 8192,
+        "query_data_path": None,
         "embedding_dim": 512, "maximum_negative_distance": 2.0,
         "verification_threshold": None,
         "horizontal_flip_probability": 0.5,
@@ -209,8 +210,7 @@ class ReIDTrainer:
         self.cfg.save(self.checkpoint_path / "cfg.yaml")
         return path
 
-    def _validation_embeddings(self):
-        paths = self.validation_loader.data_paths
+    def _embed_paths(self, paths):
         batch_size = self.cfg.evaluation_batch_size or self.cfg.batch_size
         batches = []
         for start in range(0, len(paths), batch_size):
@@ -220,6 +220,68 @@ class ReIDTrainer:
             ])
             batches.append(self.model(images, training=False).numpy())
         return np.concatenate(batches, axis=0)
+
+    def _query_paths(self):
+        if self.cfg.query_data_path is None:
+            return []
+        root = Path(self.cfg.query_data_path)
+        if not root.is_dir():
+            raise ValueError(f"query image directory does not exist: {root}")
+        return sorted(str(path) for path in root.rglob("*")
+                      if path.is_file()
+                      and path.suffix in {".jpg", ".jpeg", ".JPG", ".JPEG",
+                                          ".png", ".PNG"}
+                      and self.validation_loader._has_valid_identity(str(path)))
+
+    def _rank1_gallery_paths(self):
+        root = Path(self.cfg.validation_data_path)
+        paths = sorted(str(path) for path in root.rglob("*")
+                       if path.is_file()
+                       and path.suffix in {".jpg", ".jpeg", ".JPG", ".JPEG",
+                                           ".png", ".PNG"})
+        result = []
+        for path in paths:
+            try:
+                identity = int(self.validation_loader.identity_from_path(path))
+            except ValueError:
+                continue
+            if identity >= 0:
+                result.append(path)
+        return result
+
+    def _market1501_rank1(self, query_embeddings, query_paths,
+                          gallery_embeddings, gallery_paths):
+        gallery_ids = np.asarray([
+            self.validation_loader.identity_from_path(path)
+            for path in gallery_paths])
+        gallery_cameras = np.asarray([
+            self.validation_loader.camera_from_path(path)
+            for path in gallery_paths])
+        gallery = tf.convert_to_tensor(gallery_embeddings)
+        gallery_norm = tf.reduce_sum(tf.square(gallery), axis=1)[None, :]
+        correct, valid_queries = 0, 0
+        batch_size = self.cfg.evaluation_batch_size or self.cfg.batch_size
+        for start in range(0, len(query_paths), batch_size):
+            end = min(start + batch_size, len(query_paths))
+            query = tf.convert_to_tensor(query_embeddings[start:end])
+            query_norm = tf.reduce_sum(tf.square(query), axis=1)[:, None]
+            distances = (query_norm + gallery_norm
+                         - 2.0 * tf.matmul(query, gallery, transpose_b=True))
+            distances = distances.numpy()
+            for offset, path in enumerate(query_paths[start:end]):
+                query_id = self.validation_loader.identity_from_path(path)
+                query_camera = self.validation_loader.camera_from_path(path)
+                valid = ~((gallery_ids == query_id)
+                          & (gallery_cameras == query_camera))
+                matches = valid & (gallery_ids == query_id)
+                if not np.any(matches):
+                    continue
+                nearest = np.argmin(np.where(valid, distances[offset], np.inf))
+                correct += int(gallery_ids[nearest] == query_id)
+                valid_queries += 1
+        if valid_queries == 0:
+            raise ValueError("no query has a valid cross-camera gallery match")
+        return correct / valid_queries
 
     def _sample_validation_indices(self, count):
         paths = self.validation_loader.data_paths
@@ -276,7 +338,21 @@ class ReIDTrainer:
 
     def evaluate(self, triplet_count=None):
         count = triplet_count or self.cfg.validation_pair_count
-        embeddings = self._validation_embeddings()
+        gallery_paths = self.validation_loader.data_paths
+        query_paths = self._query_paths()
+        if query_paths:
+            rank1_gallery_paths = self._rank1_gallery_paths()
+            rank1_gallery_embeddings = self._embed_paths(rank1_gallery_paths)
+            valid_gallery = np.asarray([
+                int(self.validation_loader.identity_from_path(path)) >= 1
+                for path in rank1_gallery_paths])
+            embeddings = rank1_gallery_embeddings[valid_gallery]
+            gallery_paths = [path for path, valid in zip(rank1_gallery_paths,
+                                                         valid_gallery) if valid]
+        else:
+            rank1_gallery_paths = None
+            rank1_gallery_embeddings = None
+            embeddings = self._embed_paths(gallery_paths)
         anchor_indices, positive_indices, negative_indices = (
             self._sample_validation_indices(count))
         positive_distances = np.empty(count, dtype=np.float32)
@@ -298,6 +374,11 @@ class ReIDTrainer:
                   - np.minimum(negative_distances,
                                self.cfg.maximum_negative_distance))
         metrics["loss"] = float(np.mean(losses))
+        if query_paths:
+            query_embeddings = self._embed_paths(query_paths)
+            metrics["market1501_rank1"] = self._market1501_rank1(
+                query_embeddings, query_paths, rank1_gallery_embeddings,
+                rank1_gallery_paths)
         return metrics
 
     def train(self):
@@ -320,15 +401,19 @@ class ReIDTrainer:
                 if current % self.cfg.checkpoint_interval == 0:
                     metrics = self.evaluate()
                     validation_loss = metrics["loss"]
+                    rank1 = metrics.get("market1501_rank1")
+                    rank1_log = (f" Rank-1={rank1:.4f}"
+                                 if rank1 is not None else "")
                     print(f"\nvalidation loss={validation_loss:.4f} "
                           f"d_pos={metrics['positive_mean_distance']:.4f} "
                           f"d_neg={metrics['negative_mean_distance']:.4f} "
                           f"TAR={metrics['tar']:.4f} FAR={metrics['far']:.4f} "
                           f"threshold_acc={metrics['threshold_accuracy']:.4f} "
                           f"AUC={metrics['roc_auc']:.4f} EER={metrics['eer']:.4f} "
-                          f"TAR@FAR1%={metrics['tar_at_far_1pct']:.4f} "
-                          f"TAR@FAR0.1%={metrics['tar_at_far_0p1pct']:.4f} "
-                          f"TAR@FAR0.01%={metrics['tar_at_far_0p01pct']:.4f}")
+                          f"TAR@FAR10%={metrics['tar_at_far_10pct']:.4f} "
+                          f"TAR@FAR5%={metrics['tar_at_far_5pct']:.4f} "
+                          f"TAR@FAR1%={metrics['tar_at_far_1pct']:.4f}"
+                          f"{rank1_log}")
                     if validation_loss < self.best_loss:
                         self.best_loss = validation_loss
                         self._save(current, best=True, loss=validation_loss)
