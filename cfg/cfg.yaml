@@ -4,8 +4,8 @@ train_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_train
 validation_data_path: /train_data/market1501/Market-1501-v15.09.15/bounding_box_test
 query_data_path: /train_data/market1501/Market-1501-v15.09.15/query
 
-input_rows: 64
-input_cols: 128
+input_rows: 128
+input_cols: 64
 input_channels: 3
 embedding_dim: 512
 maximum_negative_distance: 1.0

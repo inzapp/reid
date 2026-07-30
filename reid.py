@@ -245,7 +245,7 @@ class ReIDTrainer:
                 identity = int(self.validation_loader.identity_from_path(path))
             except ValueError:
                 continue
-            if identity >= 0:
+            if identity >= 1:
                 result.append(path)
         return result
 

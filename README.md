@@ -42,11 +42,11 @@ be set to 100,000 or more without retaining triplet images in memory. When
 camera IDs such as `_c1` are present in filenames, positive pairs are sampled
 only across different cameras.
 
-When `query_data_path` is configured, evaluation also reports the official
-Market-1501 Rank-1 score. Each query is searched against the validation gallery
+When `query_data_path` is configured, evaluation also reports a Market-1501
+query-gallery Rank-1 score. Each query is searched against the validation gallery
 after excluding gallery images with the same identity and camera as the query.
-ID `0000` distractors remain in the Rank-1 gallery, while negative-ID junk is
-excluded; pair-verification metrics continue to use only IDs greater than zero.
+Rank-1 and pair-verification metrics both use only IDs greater than zero, so ID
+`0000` distractors and negative-ID junk are excluded from the gallery.
 
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
 including `embedding_dim` and `maximum_negative_distance`. Models are saved in
