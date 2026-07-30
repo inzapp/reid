@@ -494,8 +494,6 @@ class ReIDTrainer:
                           f"TAR={metrics['tar']:.4f} FAR={metrics['far']:.4f} "
                           f"threshold_acc={metrics['threshold_accuracy']:.4f} "
                           f"AUC={metrics['roc_auc']:.4f} EER={metrics['eer']:.4f} "
-                          f"TAR@FAR10%={metrics['tar_at_far_10pct']:.4f} "
-                          f"TAR@FAR5%={metrics['tar_at_far_5pct']:.4f} "
                           f"TAR@FAR1%={metrics['tar_at_far_1pct']:.4f}"
                           f"{rank1_log}")
                     if rank1 > self.best_rank1:

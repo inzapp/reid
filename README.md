@@ -31,7 +31,7 @@ Validation reports distance-based verification metrics at
 which both the positive and negative are classified correctly. When the value
 is null, the validation EER threshold is used for these diagnostic metrics. It
 also reports distance percentiles, ROC-AUC, EER, and TAR operating points at
-FAR 10%, 5%, and 1%.
+FAR 1%.
 
 Low-FAR measurements require a sufficiently large validation set. For example,
 measuring FAR 0.01% with non-zero false matches requires at least 10,000

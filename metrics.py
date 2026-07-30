@@ -51,7 +51,7 @@ def _equal_error_rate(positive_distances, negative_distances):
 
 
 def verification_metrics(positive_distances, negative_distances, threshold,
-                         target_fars=(0.1, 0.05, 0.01)):
+                         target_fars=(0.01,)):
     """Calculate fixed-threshold and threshold-independent ReID metrics."""
     positive = np.asarray(positive_distances, dtype=np.float64).reshape(-1)
     negative = np.asarray(negative_distances, dtype=np.float64).reshape(-1)
