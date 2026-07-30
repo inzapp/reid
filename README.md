@@ -1,4 +1,4 @@
-# ReID triplet training
+# ReID metric learning
 
 Images are discovered recursively below `train_data_path` and
 `validation_data_path`. The identity is the part of each basename before the
@@ -12,17 +12,19 @@ Edit `cfg/cfg.yaml`, then run:
 python train.py --cfg cfg/cfg.yaml
 ```
 
-`batch_size` is the number of triplets per iteration. Each triplet contains two
-different images of one randomly sampled identity and one image of a different
-identity. The model emits an `embedding_dim` vector and optimizes
+Training uses PK batches: `identities_per_batch` identities and
+`images_per_identity` images from each identity, with `batch_size` equal to
+their product. For every image, batch-hard mining selects the farthest
+same-identity embedding and the nearest different-identity embedding. The model
+emits an `embedding_dim` vector and optimizes
 `d(anchor, positive)^2 - min(d(anchor, negative), maximum_negative_distance)`.
 This pulls positive pairs toward distance `0` and pushes negative pairs apart
 until their distance reaches `maximum_negative_distance`.
 
-The embedding head uses Batch Normalization followed by a constant
-`1/sqrt(embedding_dim)` rescaling. This keeps embedding scale stable and the
-distance cap meaningful using conversion-friendly standard operations, without
-per-vector L2 normalization.
+When `use_id_classification_loss` is true, a training-only identity classifier
+adds cross-entropy loss with weight `id_classification_loss_weight`. Classifier
+weights are saved beside checkpoints for training resumption, while the saved
+ReID model itself still outputs embeddings only.
 
 Validation reports distance-based verification metrics at
 `verification_threshold`: TAR, FRR, TNR, FAR, and the fraction of triplets for

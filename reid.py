@@ -30,6 +30,9 @@ class TrainingConfig:
         "evaluation_pair_chunk_size": 8192,
         "query_data_path": None,
         "embedding_dim": 512, "maximum_negative_distance": 2.0,
+        "identities_per_batch": 8, "images_per_identity": 4,
+        "use_id_classification_loss": True,
+        "id_classification_loss_weight": 1.0,
         "verification_threshold": None,
         "horizontal_flip_probability": 0.5,
         "random_erasing_probability": 0.5, "color_jitter": 0.15,
@@ -61,6 +64,14 @@ class TrainingConfig:
             raise ValueError("verification_threshold must be positive or null")
         if self.batch_size <= 0 or self.max_q_size < self.batch_size:
             raise ValueError("max_q_size must be greater than or equal to batch_size")
+        if self.identities_per_batch < 2 or self.images_per_identity < 2:
+            raise ValueError(
+                "identities_per_batch and images_per_identity must be at least 2")
+        if self.batch_size != self.identities_per_batch * self.images_per_identity:
+            raise ValueError(
+                "batch_size must equal identities_per_batch * images_per_identity")
+        if self.id_classification_loss_weight < 0:
+            raise ValueError("id_classification_loss_weight must not be negative")
         if self.validation_pair_count <= 0:
             raise ValueError("validation_pair_count must be positive")
         if self.evaluation_batch_size is not None and self.evaluation_batch_size <= 0:
@@ -97,8 +108,33 @@ class ReIDTrainer:
             self.model = Model(cfg).build(self.strategy, self.optimizer)
         self.train_loader = DataLoader(cfg, training=True)
         self.validation_loader = DataLoader(cfg, training=False)
+        if cfg.identities_per_batch > len(self.train_loader.identities):
+            raise ValueError(
+                "identities_per_batch exceeds the number of training identities")
+        self.classifier = self._create_classifier()
+        self._load_classifier_weights()
         self.checkpoint_path = None
         self.best_loss = np.inf
+
+    def _create_classifier(self):
+        if not self.cfg.use_id_classification_loss:
+            return None
+        with self.strategy.scope():
+            classifier = tf.keras.Sequential([
+                tf.keras.layers.InputLayer((self.cfg.embedding_dim,)),
+                tf.keras.layers.Dense(len(self.train_loader.identities),
+                                      name="identity_logits"),
+            ], name="identity_classifier")
+        return classifier
+
+    def _load_classifier_weights(self):
+        if self.classifier is None or not self.cfg.pretrained_model_path:
+            return
+        model_path = Path(self.cfg.pretrained_model_path)
+        classifier_path = model_path.with_name(
+            f"{model_path.stem}_classifier.weights.h5")
+        if classifier_path.is_file():
+            self.classifier.load_weights(classifier_path)
 
     @staticmethod
     def _get_strategy(devices):
@@ -153,21 +189,59 @@ class ReIDTrainer:
             negative_distance, self.cfg.maximum_negative_distance)
         return positive_loss + negative_loss
 
+    @staticmethod
+    def _batch_hard_distances(embeddings, labels):
+        squared_norms = tf.reduce_sum(tf.square(embeddings), axis=1,
+                                     keepdims=True)
+        squared_distances = (squared_norms
+                             - 2.0 * tf.matmul(embeddings, embeddings,
+                                               transpose_b=True)
+                             + tf.transpose(squared_norms))
+        distances = tf.sqrt(tf.maximum(squared_distances, 1e-12))
+        labels = tf.reshape(labels, (-1, 1))
+        same_identity = tf.equal(labels, tf.transpose(labels))
+        positive_mask = tf.logical_and(
+            same_identity,
+            tf.logical_not(tf.eye(tf.shape(labels)[0], dtype=tf.bool)))
+        negative_mask = tf.logical_not(same_identity)
+        hardest_positive = tf.reduce_max(
+            tf.where(positive_mask, distances,
+                     tf.fill(tf.shape(distances), -np.inf)), axis=1)
+        hardest_negative = tf.reduce_min(
+            tf.where(negative_mask, distances,
+                     tf.fill(tf.shape(distances), np.inf)), axis=1)
+        return hardest_positive, hardest_negative
+
     @tf.function
-    def _train_step(self, anchor, positive, negative):
+    def _train_step(self, images, labels):
         with tf.GradientTape() as tape:
-            # A single call gives all three roles the same BatchNorm statistics.
-            embeddings = self.model(
-                tf.concat((anchor, positive, negative), axis=0), training=True)
-            anchor_embedding, positive_embedding, negative_embedding = tf.split(
-                embeddings, 3, axis=0)
-            positive_distance, negative_distance = self._distances(anchor_embedding, positive_embedding, negative_embedding)
+            embeddings = self.model(images, training=True)
+            positive_distance, negative_distance = self._batch_hard_distances(
+                embeddings, labels)
             contrastive_loss = tf.reduce_mean(self._contrastive_loss(positive_distance, negative_distance))
+            if self.classifier is not None:
+                logits = self.classifier(embeddings, training=True)
+                classification_loss = tf.reduce_mean(
+                    tf.keras.losses.sparse_categorical_crossentropy(
+                        labels, logits, from_logits=True))
+                predictions = tf.argmax(logits, axis=1, output_type=labels.dtype)
+                classification_accuracy = tf.reduce_mean(
+                    tf.cast(tf.equal(predictions, labels), tf.float32))
+            else:
+                classification_loss = tf.constant(0.0)
+                classification_accuracy = tf.constant(0.0)
             regularization = (tf.add_n(self.model.losses) if self.model.losses else tf.constant(0.0))
-            loss = contrastive_loss + regularization
-        gradients = tape.gradient(loss, self.model.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
-        return loss, tf.reduce_mean(positive_distance), tf.reduce_mean(negative_distance)
+            loss = (contrastive_loss
+                    + self.cfg.id_classification_loss_weight * classification_loss
+                    + regularization)
+        variables = list(self.model.trainable_variables)
+        if self.classifier is not None:
+            variables.extend(self.classifier.trainable_variables)
+        gradients = tape.gradient(loss, variables)
+        self.optimizer.apply_gradients(zip(gradients, variables))
+        return (loss, tf.reduce_mean(positive_distance),
+                tf.reduce_mean(negative_distance), classification_loss,
+                classification_accuracy)
 
     def _set_learning_rate(self, iteration):
         warm_up = (int(self.cfg.iterations * self.cfg.warm_up)
@@ -206,6 +280,10 @@ class ReIDTrainer:
         for old in self.checkpoint_path.glob(f"{prefix}_*.h5"):
             shutil.rmtree(old) if old.is_dir() else old.unlink()
         self.model.save(path, include_optimizer=False)
+        if self.classifier is not None:
+            classifier_path = path.with_name(
+                f"{path.stem}_classifier.weights.h5")
+            self.classifier.save_weights(classifier_path)
         # Save again in case runtime config changed (e.g. resolved auto checkpoint).
         self.cfg.save(self.checkpoint_path / "cfg.yaml")
         return path
@@ -391,11 +469,15 @@ class ReIDTrainer:
         try:
             for iteration in range(self.start_iteration, self.cfg.iterations):
                 self._set_learning_rate(iteration)
-                anchor, positive, negative = self.train_loader.load()
-                loss, dp, dn = self._train_step(anchor, positive, negative)
+                images, labels = self.train_loader.load()
+                loss, dp, dn, id_loss, id_accuracy = self._train_step(
+                    images, labels)
                 current = iteration + 1
                 print(f"\r[{current}/{self.cfg.iterations}] loss={loss:.4f} "
                       f"d_pos={dp:.4f} d_neg={dn:.4f}", end="", flush=True)
+                if self.classifier is not None:
+                    print(f" id_loss={id_loss:.4f} id_acc={id_accuracy:.4f}",
+                          end="", flush=True)
                 if current % 2000 == 0 or current == self.cfg.iterations:
                     self._save(current)
                 if current % self.cfg.checkpoint_interval == 0:

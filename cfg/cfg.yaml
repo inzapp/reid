@@ -22,8 +22,12 @@ l2: 0.0005
 warm_up: 1000
 momentum: 0.9
 
-# batch_size is the number of triplets consumed at each iteration.
+# PK batch: batch_size must equal identities_per_batch * images_per_identity.
 batch_size: 32
+identities_per_batch: 8
+images_per_identity: 4
+use_id_classification_loss: true
+id_classification_loss_weight: 1.0
 max_q_size: 256
 num_loader_workers: 4
 iterations: 10000

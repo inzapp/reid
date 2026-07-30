@@ -1,4 +1,4 @@
-"""Asynchronous, identity-aware triplet loader for person ReID."""
+"""Asynchronous, identity-aware PK batch loader for person ReID."""
 
 import os
 import queue
@@ -17,10 +17,10 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".JPG", ".JPEG", ".png", ".PNG"}
 
 
 class DataLoader:
-    """Prefetch augmented (anchor, positive, negative) triplets.
+    """Prefetch augmented PK training batches and index validation images.
 
-    Paths are indexed by identity once. Worker threads independently sample and
-    decode triplets into a bounded queue, so training never scans the dataset.
+    Paths are indexed by identity once. Worker threads independently sample
+    and decode batches into a bounded queue, so training never scans the dataset.
     """
 
     def __init__(self, cfg, training=False):
@@ -30,11 +30,15 @@ class DataLoader:
         self.data_paths = self.get_data_paths()
         self.paths_by_id = self._group_paths_by_id(self.data_paths)
         self.identities = tuple(self.paths_by_id)
+        self.identity_to_label = {
+            identity: label for label, identity in enumerate(self.identities)}
         self.anchor_identities = tuple(
             identity for identity, paths in self.paths_by_id.items() if len(paths) >= 2)
         self._validate_dataset()
 
-        self.q = queue.Queue(maxsize=cfg.max_q_size)
+        queue_size = (max(1, cfg.max_q_size // cfg.batch_size)
+                      if training else cfg.max_q_size)
+        self.q = queue.Queue(maxsize=queue_size)
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._executor = None
@@ -80,7 +84,7 @@ class DataLoader:
         if not self.data_paths:
             raise ValueError(f"no supported images found in: {self.data_path}")
         if len(self.identities) < 2:
-            raise ValueError("triplet sampling requires at least two identities")
+            raise ValueError("ReID sampling requires at least two identities")
         if not self.anchor_identities:
             raise ValueError("at least one identity must have two or more images")
 
@@ -96,9 +100,8 @@ class DataLoader:
         for worker_index in range(workers):
             self._executor.submit(self._producer, worker_index)
 
-        # Warm up enough triplets for one batch, rather than blocking until the
-        # whole (potentially large) queue is full.
-        target = min(self.q.maxsize, self.cfg.batch_size)
+        # Each training queue item is already one complete PK batch.
+        target = 1 if self.training else min(self.q.maxsize, self.cfg.batch_size)
         while self.q.qsize() < target:
             self._raise_worker_error()
             if self._stop_event.wait(0.05):
@@ -129,8 +132,9 @@ class DataLoader:
                 self._stop_event.wait(0.05)
                 continue
             try:
-                triplet = self._load_random_triplet(rng)
-                self.q.put(triplet, timeout=0.1)
+                item = (self._load_random_pk_batch(rng) if self.training
+                        else self._load_random_triplet(rng))
+                self.q.put(item, timeout=0.1)
             except queue.Full:
                 continue
             except Exception as exc:
@@ -149,9 +153,34 @@ class DataLoader:
         return tuple(self.load_image(path, augment=self.training, rng=rng)
                      for path in (anchor_path, positive_path, negative_path))
 
+    def _load_random_pk_batch(self, rng):
+        selected_ids = rng.sample(
+            self.identities, self.cfg.identities_per_batch)
+        images, labels = [], []
+        for identity in selected_ids:
+            paths = self.paths_by_id[identity]
+            if len(paths) >= self.cfg.images_per_identity:
+                selected_paths = rng.sample(paths, self.cfg.images_per_identity)
+            else:
+                selected_paths = list(paths)
+                selected_paths.extend(rng.choices(
+                    paths, k=self.cfg.images_per_identity - len(paths)))
+                rng.shuffle(selected_paths)
+            for path in selected_paths:
+                images.append(self.load_image(path, augment=True, rng=rng))
+                labels.append(self.identity_to_label[identity])
+        return (np.stack(images), np.asarray(labels, dtype=np.int32))
+
     def load(self):
         if not self._started:
             raise RuntimeError("DataLoader.start() must be called before load()")
+        if self.training:
+            while True:
+                self._raise_worker_error()
+                try:
+                    return self.q.get(timeout=0.2)
+                except queue.Empty:
+                    self._raise_worker_error()
         items = []
         while len(items) < self.cfg.batch_size:
             self._raise_worker_error()
