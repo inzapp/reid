@@ -114,7 +114,7 @@ class ReIDTrainer:
         self.classifier = self._create_classifier()
         self._load_classifier_weights()
         self.checkpoint_path = None
-        self.best_loss = np.inf
+        self.best_rank1 = -np.inf
 
     def _create_classifier(self):
         if not self.cfg.use_id_classification_loss:
@@ -273,9 +273,9 @@ class ReIDTrainer:
         self.checkpoint_path = candidate
         self.cfg.save(candidate / "cfg.yaml")
 
-    def _save(self, iteration, best=False, loss=None):
+    def _save(self, iteration, best=False, rank1=None):
         prefix = "best" if best else "last"
-        suffix = f"_loss_{loss:.4f}" if loss is not None else ""
+        suffix = f"_rank1_{rank1:.4f}" if rank1 is not None else ""
         path = self.checkpoint_path / f"{prefix}_{iteration}_iter{suffix}.h5"
         for old in self.checkpoint_path.glob(f"{prefix}_*.h5"):
             shutil.rmtree(old) if old.is_dir() else old.unlink()
@@ -484,8 +484,10 @@ class ReIDTrainer:
                     metrics = self.evaluate()
                     validation_loss = metrics["loss"]
                     rank1 = metrics.get("market1501_rank1")
-                    rank1_log = (f" Rank-1={rank1:.4f}"
-                                 if rank1 is not None else "")
+                    if rank1 is None:
+                        raise ValueError(
+                            "query_data_path is required for Rank-1 checkpoint selection")
+                    rank1_log = f" Rank-1={rank1:.4f}"
                     print(f"\nvalidation loss={validation_loss:.4f} "
                           f"d_pos={metrics['positive_mean_distance']:.4f} "
                           f"d_neg={metrics['negative_mean_distance']:.4f} "
@@ -496,9 +498,9 @@ class ReIDTrainer:
                           f"TAR@FAR5%={metrics['tar_at_far_5pct']:.4f} "
                           f"TAR@FAR1%={metrics['tar_at_far_1pct']:.4f}"
                           f"{rank1_log}")
-                    if validation_loss < self.best_loss:
-                        self.best_loss = validation_loss
-                        self._save(current, best=True, loss=validation_loss)
+                    if rank1 > self.best_rank1:
+                        self.best_rank1 = rank1
+                        self._save(current, best=True, rank1=rank1)
         finally:
             self.train_loader.stop()
         print("\ntraining completed")
