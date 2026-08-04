@@ -24,7 +24,8 @@ until their distance reaches `maximum_negative_distance`.
 When `use_id_classification_loss` is true, a training-only identity classifier
 adds cross-entropy loss with weight `id_classification_loss_weight`. Classifier
 weights are saved beside checkpoints for training resumption, while the saved
-ReID model itself still outputs embeddings only.
+ReID model itself still outputs embeddings only. `id_label_smoothing` defaults
+to `0.1` to reduce overconfidence on training identities.
 
 Validation reports distance-based verification metrics at
 `verification_threshold`: TAR, FRR, TNR, FAR, and the fraction of triplets for

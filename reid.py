@@ -33,6 +33,7 @@ class TrainingConfig:
         "identities_per_batch": 8, "images_per_identity": 4,
         "use_id_classification_loss": True,
         "id_classification_loss_weight": 1.0,
+        "id_label_smoothing": 0.1,
         "verification_threshold": None,
         "horizontal_flip_probability": 0.5,
         "random_erasing_probability": 0.5, "color_jitter": 0.15,
@@ -72,6 +73,8 @@ class TrainingConfig:
                 "batch_size must equal identities_per_batch * images_per_identity")
         if self.id_classification_loss_weight < 0:
             raise ValueError("id_classification_loss_weight must not be negative")
+        if not 0.0 <= self.id_label_smoothing < 1.0:
+            raise ValueError("id_label_smoothing must be in [0, 1)")
         if self.validation_pair_count <= 0:
             raise ValueError("validation_pair_count must be positive")
         if self.evaluation_batch_size is not None and self.evaluation_batch_size <= 0:
@@ -221,9 +224,12 @@ class ReIDTrainer:
             contrastive_loss = tf.reduce_mean(self._contrastive_loss(positive_distance, negative_distance))
             if self.classifier is not None:
                 logits = self.classifier(embeddings, training=True)
+                one_hot_labels = tf.one_hot(
+                    labels, depth=len(self.train_loader.identities))
                 classification_loss = tf.reduce_mean(
-                    tf.keras.losses.sparse_categorical_crossentropy(
-                        labels, logits, from_logits=True))
+                    tf.keras.losses.categorical_crossentropy(
+                        one_hot_labels, logits, from_logits=True,
+                        label_smoothing=self.cfg.id_label_smoothing))
                 predictions = tf.argmax(logits, axis=1, output_type=labels.dtype)
                 classification_accuracy = tf.reduce_mean(
                     tf.cast(tf.equal(predictions, labels), tf.float32))
