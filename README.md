@@ -55,6 +55,11 @@ The best checkpoint is selected by the highest validation Rank-1 score and is
 named with a `_rank1_<score>` suffix. Consequently, `query_data_path` is required
 during training.
 
+Every validation result is appended to `validation_log.csv` in the checkpoint
+directory. The CSV contains the iteration, learning rate, and all reported
+validation metrics so the complete training history remains available after
+training finishes.
+
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
 including `embedding_dim` and `maximum_negative_distance`. Models are saved in
 the HDF5 format with the `.h5` extension.

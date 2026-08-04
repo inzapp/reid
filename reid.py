@@ -1,5 +1,6 @@
 """ReID training configuration and contrastive-loss training loop."""
 
+import csv
 import os
 os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
@@ -117,6 +118,7 @@ class ReIDTrainer:
         self.classifier = self._create_classifier()
         self._load_classifier_weights()
         self.checkpoint_path = None
+        self.validation_log_path = None
         self.best_rank1 = -np.inf
 
     def _create_classifier(self):
@@ -277,7 +279,21 @@ class ReIDTrainer:
             index += 1
         candidate.mkdir(parents=True)
         self.checkpoint_path = candidate
+        self.validation_log_path = candidate / "validation_log.csv"
         self.cfg.save(candidate / "cfg.yaml")
+
+    def _append_validation_log(self, iteration, metrics):
+        row = {
+            "iteration": iteration,
+            "learning_rate": float(self.optimizer.learning_rate.numpy()),
+            **metrics,
+        }
+        write_header = not self.validation_log_path.exists()
+        with open(self.validation_log_path, "a", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=row.keys())
+            if write_header:
+                writer.writeheader()
+            writer.writerow(row)
 
     def _save(self, iteration, best=False, rank1=None):
         prefix = "best" if best else "last"
@@ -488,6 +504,7 @@ class ReIDTrainer:
                     self._save(current)
                 if current % self.cfg.checkpoint_interval == 0:
                     metrics = self.evaluate()
+                    self._append_validation_log(current, metrics)
                     validation_loss = metrics["loss"]
                     rank1 = metrics.get("market1501_rank1")
                     if rank1 is None:
