@@ -79,20 +79,41 @@ class Model:
 
     def _mbconv(self, x, filters, expansion=None, stride=1,
                 expanded_filters=None):
+        residual = x
         input_filters = int(x.shape[-1])
         expanded_filters = expanded_filters or input_filters * expansion
         if expanded_filters != input_filters:
             x = self._conv(x, expanded_filters, 1)
         x = tf.keras.layers.DepthwiseConv2D(
-            3, strides=stride, padding="same", activation="relu",
-            use_bias=True, depthwise_regularizer=self._regularizer())(x)
-        return self._conv(x, filters, 1, activation=None)
+            3, strides=stride, padding="same", use_bias=True,
+            # Each depthwise output sees only a 3x3 kernel, regardless of the
+            # channel count. Generic He fan-in includes all input channels and
+            # makes deep depthwise stacks collapse toward zero.
+            depthwise_initializer=tf.keras.initializers.RandomNormal(
+                stddev=(1.0 / 9.0) ** 0.5),
+            depthwise_regularizer=self._regularizer())(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.1)(x)
+        # A zero-initialized final projection starts each residual branch as
+        # an identity. This Fixup-style initialization keeps deep models
+        # stable without a runtime normalization layer.
+        x = self._conv(x, filters, 1, activation=None,
+                       kernel_initializer="zeros")
+        if stride != 1 or input_filters != filters:
+            residual = self._conv(residual, filters, 1, strides=stride,
+                                  activation=None,
+                                  kernel_initializer="glorot_uniform")
+        return tf.keras.layers.Add()([residual, x])
 
-    def _conv(self, x, filters, kernel_size, strides=1, activation="relu"):
-        return tf.keras.layers.Conv2D(
+    def _conv(self, x, filters, kernel_size, strides=1, activation="relu",
+              kernel_initializer="he_normal"):
+        x = tf.keras.layers.Conv2D(
             filters, kernel_size, strides=strides, padding="same",
-            activation=activation, use_bias=True,
+            activation=None, use_bias=True,
+            kernel_initializer=kernel_initializer,
             kernel_regularizer=self._regularizer())(x)
+        if activation == "relu":
+            x = tf.keras.layers.LeakyReLU(alpha=0.1)(x)
+        return x
 
     def _regularizer(self):
         return tf.keras.regularizers.l2(self.cfg.l2)

@@ -14,11 +14,13 @@ python train.py --cfg cfg/cfg.yaml
 
 `backbone` selects the embedding feature extractor. The default `compact_cnn`,
 `mobilenet_v2`, `mobilenet_v3_small`, and `efficientnet_b0` are implemented
-locally for edge conversion. They use only convolution/depthwise-convolution
-layers with built-in ReLU activations and global average pooling; BatchNorm,
-Normalization, Rescaling, squeeze-excitation, and residual Add layers are not
-used. These edge variants are initialized randomly and are intentionally not
-exact replicas of the TensorFlow Applications models.
+locally for edge conversion. They use convolution/depthwise-convolution,
+LeakyReLU, lightweight residual Add, and global average pooling. He
+initialization and residual paths prevent activations and gradients from
+collapsing in the deeper models. BatchNorm, Normalization, Rescaling, and
+squeeze-excitation layers are not used. These edge variants are initialized
+randomly and are intentionally not exact replicas of the TensorFlow
+Applications models.
 
 Training uses PK batches: `identities_per_batch` identities and
 `images_per_identity` images from each identity, with `batch_size` equal to
