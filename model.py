@@ -1,15 +1,9 @@
-"""ReID embedding model with optional lightweight pretrained backbones."""
+"""Edge-friendly ReID models built without normalization layers."""
 
 import tensorflow as tf
 
 
 class Model:
-    _APPLICATION_BACKBONES = {
-        "mobilenet_v2": tf.keras.applications.MobileNetV2,
-        "mobilenet_v3_small": tf.keras.applications.MobileNetV3Small,
-        "efficientnet_b0": tf.keras.applications.EfficientNetB0,
-    }
-
     def __init__(self, cfg):
         self.cfg = cfg
 
@@ -24,8 +18,14 @@ class Model:
         backbone_name = getattr(self.cfg, "backbone", "compact_cnn")
         if backbone_name == "compact_cnn":
             x = self._compact_cnn(inputs)
+        elif backbone_name == "mobilenet_v2":
+            x = self._mobilenet_v2(inputs)
+        elif backbone_name == "mobilenet_v3_small":
+            x = self._mobilenet_v3_small(inputs)
+        elif backbone_name == "efficientnet_b0":
+            x = self._efficientnet_b0(inputs)
         else:
-            x = self._application_backbone(inputs, backbone_name)
+            raise ValueError(f"unknown backbone: {backbone_name!r}")
         x = tf.keras.layers.Conv2D(self.cfg.embedding_dim, 1, use_bias=False, kernel_regularizer=self._regularizer(), name="embedding_conv")(x)
         outputs = tf.keras.layers.GlobalAveragePooling2D(name="embedding")(x)
         return tf.keras.Model(inputs, outputs, name="reid_model")
@@ -33,37 +33,66 @@ class Model:
     def _compact_cnn(self, inputs):
         x = inputs
         for filters in (32, 64, 128, 256, 512):
-            x = tf.keras.layers.Conv2D(filters, 3, strides=2, padding="same", use_bias=True, kernel_regularizer=self._regularizer())(x)
+            x = tf.keras.layers.Conv2D(
+                filters, 3, strides=2, padding="same", use_bias=True,
+                kernel_regularizer=self._regularizer())(x)
             x = tf.keras.layers.LeakyReLU(alpha=0.1)(x)
         return x
 
-    def _application_backbone(self, inputs, backbone_name):
-        if backbone_name not in self._APPLICATION_BACKBONES:
-            choices = ", ".join(("compact_cnn", *self._APPLICATION_BACKBONES))
-            raise ValueError(f"unknown backbone {backbone_name!r}; choose one of: {choices}")
-        if self.cfg.input_channels != 3:
-            raise ValueError("pretrained application backbones require input_channels: 3")
+    def _mobilenet_v2(self, inputs):
+        x = self._conv(inputs, 32, 3, strides=2)
+        settings = (
+            (1, 16, 1, 1), (6, 24, 2, 2), (6, 32, 3, 2),
+            (6, 64, 4, 2), (6, 96, 3, 1), (6, 160, 3, 2),
+            (6, 320, 1, 1),
+        )
+        for expansion, filters, repeats, stride in settings:
+            for repeat in range(repeats):
+                x = self._mbconv(x, filters, expansion,
+                                 stride if repeat == 0 else 1)
+        return self._conv(x, 1280, 1)
 
-        # The loader emits floats in [0, 1]. With preprocessing disabled,
-        # MobileNet expects [-1, 1], while EfficientNet expects [0, 255].
-        if backbone_name.startswith("mobilenet_"):
-            x = tf.keras.layers.Rescaling(2.0, offset=-1.0,
-                                          name="backbone_preprocess")(inputs)
-        else:
-            x = tf.keras.layers.Rescaling(255.0,
-                                          name="backbone_preprocess")(inputs)
+    def _mobilenet_v3_small(self, inputs):
+        x = self._conv(inputs, 16, 3, strides=2)
+        settings = (
+            (16, 16, 2), (72, 24, 2), (88, 24, 1), (96, 40, 2),
+            (240, 40, 1), (240, 40, 1), (120, 48, 1), (144, 48, 1),
+            (288, 96, 2), (576, 96, 1), (576, 96, 1),
+        )
+        for expanded_filters, filters, stride in settings:
+            x = self._mbconv(x, filters, expanded_filters=expanded_filters,
+                             stride=stride)
+        return self._conv(x, 576, 1)
 
-        constructor = self._APPLICATION_BACKBONES[backbone_name]
-        kwargs = {
-            "include_top": False,
-            "weights": getattr(self.cfg, "backbone_weights", "imagenet"),
-            "input_shape": (self.cfg.input_rows, self.cfg.input_cols, 3),
-        }
-        if backbone_name == "mobilenet_v3_small":
-            kwargs["include_preprocessing"] = False
-        backbone = constructor(**kwargs)
-        backbone.trainable = bool(getattr(self.cfg, "backbone_trainable", True))
-        return backbone(x)
+    def _efficientnet_b0(self, inputs):
+        x = self._conv(inputs, 32, 3, strides=2)
+        settings = (
+            (1, 16, 1, 1), (6, 24, 2, 2), (6, 40, 2, 2),
+            (6, 80, 3, 2), (6, 112, 3, 1), (6, 192, 4, 2),
+            (6, 320, 1, 1),
+        )
+        for expansion, filters, repeats, stride in settings:
+            for repeat in range(repeats):
+                x = self._mbconv(x, filters, expansion,
+                                 stride if repeat == 0 else 1)
+        return self._conv(x, 1280, 1)
+
+    def _mbconv(self, x, filters, expansion=None, stride=1,
+                expanded_filters=None):
+        input_filters = int(x.shape[-1])
+        expanded_filters = expanded_filters or input_filters * expansion
+        if expanded_filters != input_filters:
+            x = self._conv(x, expanded_filters, 1)
+        x = tf.keras.layers.DepthwiseConv2D(
+            3, strides=stride, padding="same", activation="relu",
+            use_bias=True, depthwise_regularizer=self._regularizer())(x)
+        return self._conv(x, filters, 1, activation=None)
+
+    def _conv(self, x, filters, kernel_size, strides=1, activation="relu"):
+        return tf.keras.layers.Conv2D(
+            filters, kernel_size, strides=strides, padding="same",
+            activation=activation, use_bias=True,
+            kernel_regularizer=self._regularizer())(x)
 
     def _regularizer(self):
         return tf.keras.regularizers.l2(self.cfg.l2)

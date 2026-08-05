@@ -12,13 +12,13 @@ Edit `cfg/cfg.yaml`, then run:
 python train.py --cfg cfg/cfg.yaml
 ```
 
-`backbone` selects the embedding feature extractor. The default `compact_cnn`
-keeps the original model, while `mobilenet_v2`, `mobilenet_v3_small`, and
-`efficientnet_b0` use TensorFlow Keras application backbones. Set
-`backbone_weights: imagenet` to load pretrained weights (downloaded on first
-use), or `null` for random initialization. `backbone_trainable: false` freezes
-the selected backbone and trains only the embedding projection. Application
-backbones require `input_channels: 3`.
+`backbone` selects the embedding feature extractor. The default `compact_cnn`,
+`mobilenet_v2`, `mobilenet_v3_small`, and `efficientnet_b0` are implemented
+locally for edge conversion. They use only convolution/depthwise-convolution
+layers with built-in ReLU activations and global average pooling; BatchNorm,
+Normalization, Rescaling, squeeze-excitation, and residual Add layers are not
+used. These edge variants are initialized randomly and are intentionally not
+exact replicas of the TensorFlow Applications models.
 
 Training uses PK batches: `identities_per_batch` identities and
 `images_per_identity` images from each identity, with `batch_size` equal to

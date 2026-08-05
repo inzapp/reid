@@ -7,7 +7,7 @@ query_data_path: /home/inzapp/train_data/market1501/Market-1501-v15.09.15/query
 input_rows: 128
 input_cols: 64
 input_channels: 3
-embedding_dim: 32
+embedding_dim: 512
 maximum_negative_distance: 1.0
 # Distances below this value are classified as the same object. If null,
 # the validation EER threshold is used for diagnostic TAR/FAR reporting.
@@ -16,9 +16,6 @@ verification_threshold: null
 model_name: reid
 # compact_cnn, mobilenet_v2, mobilenet_v3_small, or efficientnet_b0
 backbone: efficientnet_b0
-# Use imagenet for pretrained weights, or null for random initialization.
-backbone_weights: imagenet
-backbone_trainable: true
 optimizer: adam
 lr_policy: cosine
 lr: 0.001
@@ -36,7 +33,7 @@ id_classification_loss_weight: 1.0
 id_label_smoothing: 0.1
 max_q_size: 256
 num_loader_workers: 4
-iterations: 50000
+iterations: 30000
 checkpoint_interval: 1000
 fix_seed: false
 

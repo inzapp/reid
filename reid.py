@@ -23,8 +23,7 @@ from model import Model
 class TrainingConfig:
     DEFAULTS = {
         "devices": [], "pretrained_model_path": None, "model_name": "reid",
-        "backbone": "compact_cnn", "backbone_weights": "imagenet",
-        "backbone_trainable": True,
+        "backbone": "compact_cnn",
         "optimizer": "adam", "lr_policy": "cosine", "lrf": 0.05,
         "l2": 0.0005, "warm_up": 1000, "momentum": 0.9,
         "max_q_size": 256, "num_loader_workers": 4,
@@ -65,10 +64,6 @@ class TrainingConfig:
         if self.backbone not in supported_backbones:
             raise ValueError(
                 "backbone must be one of: " + ", ".join(sorted(supported_backbones)))
-        if self.backbone_weights not in ("imagenet", None):
-            raise ValueError("backbone_weights must be imagenet or null")
-        if self.backbone != "compact_cnn" and self.input_channels != 3:
-            raise ValueError("pretrained application backbones require input_channels: 3")
         if self.input_channels not in (1, 3):
             raise ValueError("input_channels must be 1 or 3")
         if self.embedding_dim <= 0 or self.maximum_negative_distance <= 0:
