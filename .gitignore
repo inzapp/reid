@@ -2,3 +2,4 @@ __pycache__/
 *.py[cod]
 checkpoint/
 *.h5
+.codex-runs/

@@ -73,3 +73,48 @@ training finishes.
 Every checkpoint directory contains the exact `cfg.yaml` used for that run,
 including `embedding_dim` and `maximum_negative_distance`. Models are saved in
 the HDF5 format with the `.h5` extension.
+
+## Autonomous Codex experiments
+
+`scripts/codex_experiment_loop.sh` runs bounded Codex experiments in a
+dedicated sibling Git worktree on the `codex/experiments` branch. It never runs
+experiments in the current worktree. Accepted model changes must include an
+evidence entry in `experiments/accepted.md`; rejected trials may commit only an
+entry in `experiments/rejected.md`.
+
+Before starting, commit or stash tracked changes and make sure Codex CLI is
+authenticated. Then run a bounded number of experiments:
+
+```bash
+chmod +x scripts/codex_experiment_loop.sh
+scripts/codex_experiment_loop.sh 10
+```
+
+Useful environment overrides are:
+
+```bash
+REID_AUTO_WORKTREE=/path/to/reid-auto \
+REID_RUN_TIMEOUT=8h \
+REID_MAX_UNSUCCESSFUL=3 \
+REID_CODEX_MODEL=<model> \
+scripts/codex_experiment_loop.sh 10
+```
+
+Review the accumulated branch before integrating it:
+
+```bash
+git log --stat master..codex/experiments
+git diff master...codex/experiments
+```
+
+The policy in `experiments/POLICY.md` requires a development split separate
+from the final held-out query/gallery test, deterministic comparisons, and
+multi-seed confirmation before a model improvement can be accepted. Every
+automated baseline and candidate run uses the following fixed training budget:
+
+```yaml
+iterations: 30000
+checkpoint_interval: 30000
+```
+
+Consequently, each seed is evaluated once at the end of training.
