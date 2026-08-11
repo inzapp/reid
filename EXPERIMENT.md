@@ -182,3 +182,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6442992874109263` → `0.6505344418052257` (`+0.0062351543942994`).
 - Guardrails: Validation loss improved from `-0.4414414167404175` to `-0.459439218044281`; AUC changed from `0.9850128622` to `0.98461670875`; EER from `0.05689999999999998` to `0.057819999999999996`; TAR@FAR1% from `0.77777` to `0.77245`.
 - Inference cost: Unchanged parameters and operations; augmentation is training-only.
+
+## 2026-08-11 — Reduce color jitter to preserve clothing-color cues
+
+- Parent commit: `ee5fb0e3fdd0a060aa880a908fdd524fd0f0631b`
+- Change: Reduced `color_jitter` from `0.15` to `0.05` for `compact_cnn`.
+- Rank-1: `0.6241092636579573` → `0.6582541567695962` (`+0.0341448931116389`).
+- Guardrails: Validation loss improved from `-0.45757028460502625` to `-0.46080005168914795`; AUC improved from `0.9835561982500001` to `0.9847315404000001`; EER improved from `0.059975000000000014` to `0.055914999999999986`; TAR@FAR1% improved from `0.76726` to `0.77935`.
+- Inference cost: Unchanged parameters and operations; augmentation is training-only.
