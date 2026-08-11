@@ -57,6 +57,12 @@ project explicitly requires a different threshold.
 6. Run proportional syntax checks, unit/smoke tests, training, and evaluation.
    Never invent or estimate metrics. Use the configured primary metric from the
    designated result source.
+   GPU validation and training commands require host GPU device access. Run
+   `nvidia-smi -L`, TensorFlow GPU discovery, and the configured training command
+   with escalated execution outside the workspace sandbox. Do not treat
+   `PYENV_VERSION=tf` or `pyenv activate tf` as a substitute for GPU device
+   access. If escalated GPU access cannot be granted, record the run as blocked
+   and end that run without attempting another hypothesis.
 7. Compare against the direct committed parent using the same dataset split,
    seed policy, training budget, evaluation protocol, and hardware-relevant
    settings. Changing the evaluation protocol requires a separate experiment
