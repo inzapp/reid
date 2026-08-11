@@ -216,3 +216,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6748812351543944` → `0.6763657957244655` (`+0.0014845605700711`).
 - Guardrails: Validation loss improved from `-0.5147063136100769` to `-0.566238284111023`; AUC improved from `0.9849461981000001` to `0.98752020945`; EER improved from `0.05600000000000002` to `0.050175000000000025`; TAR@FAR1% improved from `0.78499` to `0.81142`.
 - Inference cost: Unchanged parameters and operations; the negative-distance cap is training-only.
+
+## 2026-08-11 — Lower the cosine final learning-rate ratio for finer late refinement
+
+- Parent commit: `d158989cac20df0dc70662f5eca90e8d7aede17b`.
+- Change: Lowered `lrf` from `0.05` to `0.01` for `compact_cnn`.
+- Rank-1: `0.6760688836104513` → `0.6882422802850356` (`+0.0121733966745844`); the candidate also exceeded the previous historical best `0.6849762470308789` by `0.0032660332541568`.
+- Guardrails: Validation loss improved from `-0.5632808208465576` to `-0.5689043998718262`; AUC changed from `0.98721888475` to `0.98689473365`; EER from `0.051300000000000005` to `0.051985000000000024`; TAR@FAR1% from `0.809` to `0.80639`.
+- Inference cost: Unchanged parameters and operations; the learning-rate schedule is training-only.

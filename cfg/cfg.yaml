@@ -19,7 +19,7 @@ backbone: compact_cnn
 optimizer: adam
 lr_policy: cosine
 lr: 0.001
-lrf: 0.05
+lrf: 0.01
 l2: 0.0002
 warm_up: 1000
 momentum: 0.9
