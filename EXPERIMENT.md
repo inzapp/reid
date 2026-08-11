@@ -198,3 +198,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6514251781472684` → `0.6849762470308789` (`+0.0335510688836105`).
 - Guardrails: Validation loss improved from `-0.475689172744751` to `-0.5171219706535339`; AUC changed from `0.9852943779499999` to `0.9850397041500001`; EER from `0.054805000000000006` to `0.05647999999999999`; TAR@FAR1% improved from `0.79017` to `0.79474`.
 - Inference cost: Unchanged parameters and operations; L2 regularization is training-only.
+
+## 2026-08-11 — Increase the negative-distance cap to sustain hard-negative separation
+
+- Parent commit: `22ae668af23ce8dc84b6c724abc2ea98f9cf5e63`.
+- Change: Increased `maximum_negative_distance` from `1.0` to `1.2` for `compact_cnn`.
+- Rank-1: `0.6748812351543944` → `0.6763657957244655` (`+0.0014845605700711`).
+- Guardrails: Validation loss improved from `-0.5147063136100769` to `-0.566238284111023`; AUC improved from `0.9849461981000001` to `0.98752020945`; EER improved from `0.05600000000000002` to `0.050175000000000025`; TAR@FAR1% improved from `0.78499` to `0.81142`.
+- Inference cost: Unchanged parameters and operations; the negative-distance cap is training-only.
