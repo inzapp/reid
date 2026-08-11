@@ -190,3 +190,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6241092636579573` → `0.6582541567695962` (`+0.0341448931116389`).
 - Guardrails: Validation loss improved from `-0.45757028460502625` to `-0.46080005168914795`; AUC improved from `0.9835561982500001` to `0.9847315404000001`; EER improved from `0.059975000000000014` to `0.055914999999999986`; TAR@FAR1% improved from `0.76726` to `0.77935`.
 - Inference cost: Unchanged parameters and operations; augmentation is training-only.
+
+## 2026-08-11 — Reduce L2 regularization to avoid underfitting the compact backbone
+
+- Parent commit: `f370335fa63a71293678c2a5b952be0e444d8fbf`
+- Change: Reduced `l2` from `0.0005` to `0.0002` for `compact_cnn`.
+- Rank-1: `0.6514251781472684` → `0.6849762470308789` (`+0.0335510688836105`).
+- Guardrails: Validation loss improved from `-0.475689172744751` to `-0.5171219706535339`; AUC changed from `0.9852943779499999` to `0.9850397041500001`; EER from `0.054805000000000006` to `0.05647999999999999`; TAR@FAR1% improved from `0.79017` to `0.79474`.
+- Inference cost: Unchanged parameters and operations; L2 regularization is training-only.
