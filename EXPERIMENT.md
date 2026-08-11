@@ -65,8 +65,13 @@ project explicitly requires a different threshold.
    and end that run without attempting another hypothesis.
 7. Compare against the direct committed parent using the same dataset split,
    seed policy, training budget, evaluation protocol, and hardware-relevant
-   settings. Changing the evaluation protocol requires a separate experiment
-   and must not be presented as a model-quality improvement.
+   settings. Use the fresh parent run to measure the experimental effect, but
+   use the highest unrounded accepted Rank-1 in this file as the acceptance
+   baseline. A candidate must exceed both baselines by the configured minimum
+   improvement. Never lower or replace the historical-best baseline when a
+   fresh parent run scores lower. Changing the evaluation protocol requires a
+   separate experiment and must not be presented as a model-quality
+   improvement.
 8. Append the outcome and metrics to `.experiment-history.md` for every run.
 9. If the primary metric improves by at least the configured threshold and all
    important guardrail metrics remain acceptable, append an entry to the
@@ -105,15 +110,20 @@ experiment.
 
 ## Commit acceptance rules
 
-- Never commit an improvement smaller than `0.001` absolute for a higher-is-
-  better 0-to-1 metric. For a lower-is-better metric, require an equivalent
-  decrease.
+- Never commit a candidate unless it improves by at least `0.001` absolute over
+  both the fresh direct-parent result and the highest previously accepted
+  unrounded Rank-1 in this file. For a lower-is-better metric, require the
+  equivalent decrease against both baselines.
+- Treat accepted metric history as monotonic: a newly accepted Rank-1 must be
+  greater than the previous historical best by at least `0.001`. A lower fresh
+  baseline caused by training variance does not lower this threshold.
 - Compare unrounded metric values when available. A displayed rounding change
   alone is not sufficient evidence.
 - One commit represents one successful hypothesis.
 - Do not commit raw checkpoints, datasets, generated models, caches, raw Codex
   event logs, or `.experiment-history.md`.
-- Include the primary metric before and after in the commit message.
+- Include the previous historical-best metric and the new candidate metric in
+  the commit message.
 - Do not modify the policy sections of this file during an experiment. Only
   append a successful result to `Accepted experiment history`.
 - Leave the repository clean after every successful commit or failed rollback,
