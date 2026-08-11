@@ -174,3 +174,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6440023752969121` → `0.6472684085510689` (`+0.0032660332541568`).
 - Guardrails: Validation loss improved from `-0.42417898774147034` to `-0.4465788006782532`; AUC changed from `0.9864075751` to `0.9846521522`; EER from `0.05159000000000001` to `0.057984999999999995`; TAR@FAR1% from `0.795` to `0.77654`.
 - Inference cost: Unchanged parameters and operations; augmentation is training-only.
+
+## 2026-08-11 — Reduce random erasing to retain discriminative identity regions
+
+- Parent commit: `96bf5ed658b67eab4bddd8c44f16c6c6f705cdc0`
+- Change: Reduced `random_erasing_probability` from `0.5` to `0.25` for `compact_cnn`.
+- Rank-1: `0.6442992874109263` → `0.6505344418052257` (`+0.0062351543942994`).
+- Guardrails: Validation loss improved from `-0.4414414167404175` to `-0.459439218044281`; AUC changed from `0.9850128622` to `0.98461670875`; EER from `0.05689999999999998` to `0.057819999999999996`; TAR@FAR1% from `0.77777` to `0.77245`.
+- Inference cost: Unchanged parameters and operations; augmentation is training-only.
