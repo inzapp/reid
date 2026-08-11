@@ -33,8 +33,8 @@ id_classification_loss_weight: 1.0
 id_label_smoothing: 0.1
 max_q_size: 256
 num_loader_workers: 4
-iterations: 100000
-checkpoint_interval: 2000
+iterations: 30000
+checkpoint_interval: 30000
 fix_seed: false
 
 # Validation images are embedded once; only sampled index distances are kept.

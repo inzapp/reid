@@ -76,45 +76,26 @@ the HDF5 format with the `.h5` extension.
 
 ## Autonomous Codex experiments
 
-`scripts/codex_experiment_loop.sh` runs bounded Codex experiments in a
-dedicated sibling Git worktree on the `codex/experiments` branch. It never runs
-experiments in the current worktree. Accepted model changes must include an
-evidence entry in `experiments/accepted.md`; rejected trials may commit only an
-entry in `experiments/rejected.md`.
+The repository-independent experiment loop is defined by two files:
 
-Before starting, commit or stash tracked changes and make sure Codex CLI is
-authenticated. Then run a bounded number of experiments:
+- `EXPERIMENT.md`: committed project rules and successful experiment history.
+- `codex_experiment_run.sh`: runs bounded Codex experiments directly in the
+  current repository.
 
-```bash
-chmod +x scripts/codex_experiment_loop.sh
-scripts/codex_experiment_loop.sh 10
-```
+Failed and inconclusive attempts are stored only in the ignored local file
+`.experiment-history.md`. Codex reads it before choosing each new hypothesis so
+the same failed experiment is not repeated.
 
-Useful environment overrides are:
+Commit or otherwise remove every tracked and untracked working-tree change,
+make sure Codex CLI is authenticated, and run:
 
 ```bash
-REID_AUTO_WORKTREE=/path/to/reid-auto \
-REID_RUN_TIMEOUT=8h \
-REID_MAX_UNSUCCESSFUL=3 \
-REID_CODEX_MODEL=<model> \
-scripts/codex_experiment_loop.sh 10
+chmod +x codex_experiment_run.sh
+./codex_experiment_run.sh 10
 ```
 
-Review the accumulated branch before integrating it:
-
-```bash
-git log --stat master..codex/experiments
-git diff master...codex/experiments
-```
-
-The policy in `experiments/POLICY.md` requires a development split separate
-from the final held-out query/gallery test, deterministic comparisons, and
-multi-seed confirmation before a model improvement can be accepted. Every
-automated baseline and candidate run uses the following fixed training budget:
-
-```yaml
-iterations: 30000
-checkpoint_interval: 30000
-```
-
-Consequently, each seed is evaluated once at the end of training.
+The loop stops after three consecutive runs without an accepted commit. It
+never performs automatic destructive cleanup; if an interrupted agent leaves
+changes, the loop stops for manual inspection. Copy `EXPERIMENT.md` and
+`codex_experiment_run.sh` to another repository and edit only the
+project-specific section of `EXPERIMENT.md`.
