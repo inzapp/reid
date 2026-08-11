@@ -15,7 +15,7 @@ verification_threshold: null
 
 model_name: reid
 # compact_cnn, mobilenet_v2, mobilenet_v3_small, or efficientnet_b0
-backbone: efficientnet_b0
+backbone: compact_cnn
 optimizer: adam
 lr_policy: cosine
 lr: 0.001
@@ -25,16 +25,16 @@ warm_up: 1000
 momentum: 0.9
 
 # PK batch: batch_size must equal identities_per_batch * images_per_identity.
-batch_size: 32
-identities_per_batch: 8
-images_per_identity: 4
+batch_size: 64
+identities_per_batch: 32
+images_per_identity: 2
 use_id_classification_loss: true
 id_classification_loss_weight: 1.0
 id_label_smoothing: 0.1
 max_q_size: 256
 num_loader_workers: 4
-iterations: 30000
-checkpoint_interval: 1000
+iterations: 100000
+checkpoint_interval: 2000
 fix_seed: false
 
 # Validation images are embedded once; only sampled index distances are kept.
