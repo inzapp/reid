@@ -12,6 +12,8 @@ readonly RUN_TIMEOUT="${CODEX_EXPERIMENT_TIMEOUT:-8h}"
 readonly LOCK_FILE="${CODEX_EXPERIMENT_LOCK_FILE:-/tmp/codex-experiment-$(basename "$REPO_ROOT").lock}"
 
 max_runs="${CODEX_EXPERIMENT_MAX_RUNS:-10}"
+model="${CODEX_EXPERIMENT_MODEL:-gpt-5.6-sol}"
+thinking_level="${CODEX_EXPERIMENT_THINKING_LEVEL:-low}"
 force_latest_best=false
 run_count_set=false
 
@@ -22,11 +24,15 @@ fail() {
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--force-latest-best] [RUN_COUNT]
+Usage: $(basename "$0") [OPTIONS] [RUN_COUNT]
 
   --force-latest-best  Ignore whether the latest accepted metric belongs to
                        HEAD and force the highest Rank-1 in EXPERIMENT.md to
                        be used as the baseline without retraining it.
+  --model MODEL        Codex model (default: gpt-5.6-sol).
+  --thinking-level LEVEL
+                       Reasoning effort: none, low, medium, high, xhigh, or max
+                       (default: low).
   -h, --help           Show this help.
 EOF
 }
@@ -35,6 +41,16 @@ while (($#)); do
     case "$1" in
         --force-latest-best)
             force_latest_best=true
+            ;;
+        --model)
+            (($# >= 2)) || fail "--model requires a value"
+            model="$2"
+            shift
+            ;;
+        --thinking-level)
+            (($# >= 2)) || fail "--thinking-level requires a value"
+            thinking_level="$2"
+            shift
             ;;
         -h|--help)
             usage
@@ -62,6 +78,8 @@ while (($#)); do
 done
 
 readonly MAX_RUNS="$max_runs"
+readonly CODEX_MODEL="$model"
+readonly THINKING_LEVEL="$thinking_level"
 readonly FORCE_LATEST_BEST="$force_latest_best"
 
 active_run_id=""
@@ -155,6 +173,11 @@ meets_minimum_improvement() {
 }
 
 is_positive_integer "$MAX_RUNS" || fail "run count must be a positive integer"
+[[ -n "$CODEX_MODEL" ]] || fail "model must not be empty"
+case "$THINKING_LEVEL" in
+    none|low|medium|high|xhigh|max) ;;
+    *) fail "thinking level must be one of: none, low, medium, high, xhigh, max" ;;
+esac
 [[ -f "$POLICY_FILE" ]] || fail "missing $POLICY_FILE"
 command -v codex >/dev/null || fail "codex CLI is not installed"
 command -v flock >/dev/null || fail "flock is not installed"
@@ -185,6 +208,11 @@ if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=normal)" ]]
     fail "the repository must be completely clean before automation starts"
 fi
 
+echo "Codex experiment configuration:"
+echo "  model: $CODEX_MODEL"
+echo "  thinking level: $THINKING_LEVEL"
+echo "  runs: $MAX_RUNS"
+
 for ((run = 1; run <= MAX_RUNS; run++)); do
     if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=normal)" ]]; then
         fail "tracked or untracked changes remain from the previous run; inspect them manually"
@@ -209,18 +237,17 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
     active_event_log="$event_log"
     active_final_log="$final_log"
 
-    echo "[$run/$MAX_RUNS] starting experiment $run_id at ${parent_commit:0:12}"
+    echo "[$run/$MAX_RUNS] starting experiment $run_id at ${parent_commit:0:12} (model=$CODEX_MODEL, thinking=$THINKING_LEVEL)"
 
     codex_args=(
         exec
         --cd "$REPO_ROOT"
         --approve-for-me
+        --model "$CODEX_MODEL"
+        --config "model_reasoning_effort=\"$THINKING_LEVEL\""
         --json
         --output-last-message "$final_log"
     )
-    if [[ -n "${CODEX_EXPERIMENT_MODEL:-}" ]]; then
-        codex_args+=(--model "$CODEX_EXPERIMENT_MODEL")
-    fi
 
     {
         cat "$POLICY_FILE"
@@ -229,6 +256,8 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
         printf -- '- Parent commit: `%s`\n' "$parent_commit"
         printf -- '- Local history: `%s`\n' "$LOCAL_HISTORY"
         printf -- '- Maximum wall time: `%s`\n\n' "$RUN_TIMEOUT"
+        printf -- '- Codex model: `%s`\n' "$CODEX_MODEL"
+        printf -- '- Thinking level: `%s`\n\n' "$THINKING_LEVEL"
         printf -- '- Historical-best accepted Rank-1: `%s`\n' "$best_rank1_before"
         printf -- '- Minimum candidate Rank-1 for acceptance: historical best + `0.001`\n\n'
         if [[ "$FORCE_LATEST_BEST" == true ]]; then
