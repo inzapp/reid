@@ -248,3 +248,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6929928741092637` → `0.6947743467933492` (`+0.0017814726840855`).
 - Guardrails: Validation loss improved from `-0.5664274096488953` to `-0.5684820413589478`; AUC improved from `0.9872017241999999` to `0.9875799767000001`; EER improved from `0.05051000000000003` to `0.050350000000000006`; TAR@FAR1% changed from `0.80704` to `0.80583`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; horizontal flipping is training-only.
+
+## 2026-08-12 — Increase identity-label smoothing to regularize the auxiliary classifier
+
+- Parent commit: `0c1808602e9d1563950ee8c911b81957d171be0c`.
+- Change: Increased `id_label_smoothing` from `0.1` to `0.15` for `compact_cnn`.
+- Rank-1: `0.6947743467933492` → `0.7140736342042755` (`+0.0192992874109263`).
+- Guardrails: Validation loss improved from `-0.5684820413589478` to `-0.5730777978897095`; AUC improved from `0.9875799767000001` to `0.9882387977499999`; EER improved from `0.050350000000000006` to `0.048735`; TAR@FAR1% improved from `0.80583` to `0.81965`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; label smoothing is training-only.
