@@ -489,7 +489,7 @@ class ReIDTrainer:
                 rank1_gallery_paths)
         return metrics
 
-    def train(self):
+    def train(self, checkpoint_logs_only=False):
         self.model.summary()
         self.cfg.print_cfg()
         print(f"train: {len(self.train_loader.data_paths)} images, "
@@ -503,11 +503,18 @@ class ReIDTrainer:
                 loss, dp, dn, id_loss, id_accuracy = self._train_step(
                     images, labels)
                 current = iteration + 1
-                print(f"\r[{current}/{self.cfg.iterations}] loss={loss:.4f} "
-                      f"d_pos={dp:.4f} d_neg={dn:.4f}", end="", flush=True)
-                if self.classifier is not None:
-                    print(f" id_loss={id_loss:.4f} id_acc={id_accuracy:.4f}",
-                          end="", flush=True)
+                log_progress = (not checkpoint_logs_only
+                                or current % self.cfg.checkpoint_interval == 0)
+                if log_progress:
+                    prefix = "" if checkpoint_logs_only else "\r"
+                    ending = "\n" if checkpoint_logs_only else ""
+                    progress = (f"{prefix}[{current}/{self.cfg.iterations}] "
+                                f"loss={loss:.4f} d_pos={dp:.4f} "
+                                f"d_neg={dn:.4f}")
+                    if self.classifier is not None:
+                        progress += (f" id_loss={id_loss:.4f} "
+                                     f"id_acc={id_accuracy:.4f}")
+                    print(progress, end=ending, flush=True)
                 if current % 2000 == 0 or current == self.cfg.iterations:
                     self._save(current)
                 if current % self.cfg.checkpoint_interval == 0:
@@ -519,7 +526,8 @@ class ReIDTrainer:
                         raise ValueError(
                             "query_data_path is required for Rank-1 checkpoint selection")
                     rank1_log = f" Rank-1={rank1:.4f}"
-                    print(f"\nvalidation loss={validation_loss:.4f} "
+                    validation_prefix = "" if checkpoint_logs_only else "\n"
+                    print(f"{validation_prefix}validation loss={validation_loss:.4f} "
                           f"d_pos={metrics['positive_mean_distance']:.4f} "
                           f"d_neg={metrics['negative_mean_distance']:.4f} "
                           f"TAR={metrics['tar']:.4f} FAR={metrics['far']:.4f} "
@@ -532,4 +540,5 @@ class ReIDTrainer:
                         self._save(current, best=True, rank1=rank1)
         finally:
             self.train_loader.stop()
-        print("\ntraining completed")
+        completion_prefix = "" if checkpoint_logs_only else "\n"
+        print(f"{completion_prefix}training completed")
