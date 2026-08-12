@@ -8,14 +8,61 @@ readonly LOCAL_EXCLUDE="$GIT_DIR/info/exclude"
 readonly POLICY_FILE="$REPO_ROOT/EXPERIMENT.md"
 readonly LOCAL_HISTORY="$REPO_ROOT/.experiment-history.md"
 readonly RUN_ROOT="$REPO_ROOT/.codex-runs"
-readonly MAX_RUNS="${1:-${CODEX_EXPERIMENT_MAX_RUNS:-10}}"
 readonly RUN_TIMEOUT="${CODEX_EXPERIMENT_TIMEOUT:-8h}"
 readonly LOCK_FILE="${CODEX_EXPERIMENT_LOCK_FILE:-/tmp/codex-experiment-$(basename "$REPO_ROOT").lock}"
+
+max_runs="${CODEX_EXPERIMENT_MAX_RUNS:-10}"
+force_latest_best=false
+run_count_set=false
 
 fail() {
     echo "error: $*" >&2
     exit 1
 }
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--force-latest-best] [RUN_COUNT]
+
+  --force-latest-best  Ignore whether the latest accepted metric belongs to
+                       HEAD and force the highest Rank-1 in EXPERIMENT.md to
+                       be used as the baseline without retraining it.
+  -h, --help           Show this help.
+EOF
+}
+
+while (($#)); do
+    case "$1" in
+        --force-latest-best)
+            force_latest_best=true
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            (($# <= 1)) || fail "only one run count may be specified"
+            if (($# == 1)); then
+                max_runs="$1"
+                run_count_set=true
+            fi
+            break
+            ;;
+        -* )
+            fail "unknown option: $1"
+            ;;
+        *)
+            [[ "$run_count_set" == false ]] || fail "only one run count may be specified"
+            max_runs="$1"
+            run_count_set=true
+            ;;
+    esac
+    shift
+done
+
+readonly MAX_RUNS="$max_runs"
+readonly FORCE_LATEST_BEST="$force_latest_best"
 
 active_run_id=""
 active_event_log=""
@@ -155,7 +202,9 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
         || fail "EXPERIMENT.md has no accepted Rank-1 baseline"
     [[ -n "$latest_rank1_line" ]] \
         || fail "EXPERIMENT.md has no latest accepted Rank-1 entry"
-    verify_recorded_baseline_is_current_head "$latest_rank1_line" "$parent_commit"
+    if [[ "$FORCE_LATEST_BEST" == false ]]; then
+        verify_recorded_baseline_is_current_head "$latest_rank1_line" "$parent_commit"
+    fi
     active_run_id="$run_id"
     active_event_log="$event_log"
     active_final_log="$final_log"
@@ -182,17 +231,22 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
         printf -- '- Maximum wall time: `%s`\n\n' "$RUN_TIMEOUT"
         printf -- '- Historical-best accepted Rank-1: `%s`\n' "$best_rank1_before"
         printf -- '- Minimum candidate Rank-1 for acceptance: historical best + `0.001`\n\n'
-        printf 'The latest accepted metric entry in EXPERIMENT.md was verified '
-        printf 'to come from the current HEAD, and the working tree was clean. '
-        printf 'Treat the historical-best accepted Rank-1 as the current baseline. '
-        printf 'For this run, this verified recorded baseline serves as both the '
+        if [[ "$FORCE_LATEST_BEST" == true ]]; then
+            printf 'The runner was started with `--force-latest-best`. Ignore '
+            printf 'whether HEAD or any commits after the latest accepted entry are '
+            printf 'documented in EXPERIMENT.md. Do not ask to document or measure '
+            printf 'the current HEAD baseline. Force the historical-best accepted '
+            printf 'Rank-1 above to be the current and acceptance baseline. '
+        else
+            printf 'The latest accepted metric entry in EXPERIMENT.md was verified '
+            printf 'to come from the current HEAD, and the working tree was clean. '
+            printf 'Treat the historical-best accepted Rank-1 as the current baseline. '
+        fi
+        printf 'For this run, this selected recorded baseline serves as both the '
         printf 'direct-parent and historical acceptance baseline and supersedes the '
         printf 'fresh-parent-training requirement in workflow rule 7. '
-        printf 'Do not retrain the unchanged baseline. Inspect the current HEAD diff '
-        printf 'and accepted entry for consistency, then modify exactly one candidate '
-        printf 'variable and run only the candidate training/evaluation. If the HEAD '
-        printf 'contains a relevant change not documented by the latest accepted entry, '
-        printf 'record the run as blocked and do not train.\n\n'
+        printf 'Do not retrain the baseline. Modify exactly one candidate variable '
+        printf 'and run only the candidate training/evaluation.\n\n'
         printf 'For every train.py training command in this run, add '
         printf '`--checkpoint-logs-only` so progress output is emitted only at '
         printf 'checkpoint intervals. Do not omit this option and do not use `tee`.\n\n'
