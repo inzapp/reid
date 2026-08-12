@@ -156,6 +156,15 @@ latest_accepted_rank1_line() {
         "$POLICY_FILE"
 }
 
+fixed_training_iterations() {
+    awk '
+        /^[[:space:]]+iterations:[[:space:]]*[0-9]+[[:space:]]*$/ {
+            print $2
+            exit
+        }
+    ' "$POLICY_FILE"
+}
+
 verify_recorded_baseline_is_current_head() {
     local metric_line="$1"
     local head_commit="$2"
@@ -179,6 +188,10 @@ case "$THINKING_LEVEL" in
     *) fail "thinking level must be one of: none, low, medium, high, xhigh, max" ;;
 esac
 [[ -f "$POLICY_FILE" ]] || fail "missing $POLICY_FILE"
+expected_iterations="$(fixed_training_iterations)"
+is_positive_integer "$expected_iterations" \
+    || fail "EXPERIMENT.md has no valid fixed training iterations value"
+readonly EXPECTED_ITERATIONS="$expected_iterations"
 command -v codex >/dev/null || fail "codex CLI is not installed"
 command -v flock >/dev/null || fail "flock is not installed"
 command -v timeout >/dev/null || fail "timeout is not installed"
@@ -212,6 +225,7 @@ echo "Codex experiment configuration:"
 echo "  model: $CODEX_MODEL"
 echo "  thinking level: $THINKING_LEVEL"
 echo "  runs: $MAX_RUNS"
+echo "  required training iterations: $EXPECTED_ITERATIONS"
 
 for ((run = 1; run <= MAX_RUNS; run++)); do
     if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=normal)" ]]; then
@@ -258,6 +272,8 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
         printf -- '- Maximum wall time: `%s`\n\n' "$RUN_TIMEOUT"
         printf -- '- Codex model: `%s`\n' "$CODEX_MODEL"
         printf -- '- Thinking level: `%s`\n\n' "$THINKING_LEVEL"
+        printf -- '- Required completed training iteration: `%s`\n\n' \
+            "$EXPECTED_ITERATIONS"
         printf -- '- Historical-best accepted Rank-1: `%s`\n' "$best_rank1_before"
         printf -- '- Minimum candidate Rank-1 for acceptance: historical best + `0.001`\n\n'
         if [[ "$FORCE_LATEST_BEST" == true ]]; then
@@ -279,6 +295,30 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
         printf 'For every train.py training command in this run, add '
         printf '`--checkpoint-logs-only` so progress output is emitted only at '
         printf 'checkpoint intervals. Do not omit this option and do not use `tee`.\n\n'
+        printf 'A training command that is still `in_progress` is running, not '
+        printf 'finished, failed, or inconclusive. Run training in the foreground. '
+        printf 'If command execution yields while it is still running or returns a '
+        printf 'session ID, keep waiting or polling that exact command session until '
+        printf 'it produces a completed event and exit code. While it is running, do '
+        printf 'not launch another command, inspect checkpoints, evaluate results, '
+        printf 'edit history, roll back the candidate, or produce a final response. '
+        printf 'Do not abandon or terminate training merely because no output appears '
+        printf 'between checkpoint intervals.\n\n'
+        printf 'After the training command completes successfully, identify the '
+        printf 'checkpoint directory created by this candidate run. Before any final '
+        printf 'evaluation or acceptance/rejection decision, verify all of the '
+        printf 'following: (1) the completed command exit code is zero; (2) that '
+        printf 'directory contains `last_%s_iter.h5`; (3) it contains ' \
+            "$EXPECTED_ITERATIONS"
+        printf '`best_%s_iter_rank1_*.h5`; and (4) its `validation_log.csv` contains ' \
+            "$EXPECTED_ITERATIONS"
+        printf 'a row whose iteration is exactly `%s`. ' "$EXPECTED_ITERATIONS"
+        printf 'Read Rank-1 only from that exact row. If any artifact is absent, first '
+        printf 'check whether training is still running and continue waiting if so. '
+        printf 'Only after the command has definitively completed with a nonzero exit '
+        printf 'code or was externally interrupted may the run be recorded as blocked '
+        printf 'or inconclusive; never perform final metric evaluation without all '
+        printf 'four completion checks.\n\n'
         printf 'Perform exactly one experiment under these rules. '
         printf 'Work directly in this repository. Do not ask for input. '
         printf 'Request escalated execution outside the workspace sandbox for '
