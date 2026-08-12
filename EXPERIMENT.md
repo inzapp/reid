@@ -232,3 +232,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6882422802850356` → `0.690914489311164` (`+0.0026722090261284`).
 - Guardrails: Validation loss changed from `-0.5689043998718262` to `-0.5679037570953369`; AUC improved from `0.98689473365` to `0.9869965378500001`; EER changed from `0.051985000000000024` to `0.05254999999999999`; TAR@FAR1% improved from `0.80639` to `0.81181`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; color jitter is training-only.
+
+## 2026-08-12 — Moderately lengthen warm-up to balance stability and training time
+
+- Parent commit: `81191a403c0a8e61ac13883ee7bfb05a0f0b627a`.
+- Change: Increased `warm_up` from `1000` to `1500` for `compact_cnn`.
+- Rank-1: `0.690914489311164` → `0.6929928741092637` (`+0.0020783847980997`).
+- Guardrails: Validation loss changed from `-0.5679037570953369` to `-0.5664274096488953`; AUC improved from `0.9869965378500001` to `0.9872017241999999`; EER improved from `0.05254999999999999` to `0.05051000000000003`; TAR@FAR1% changed from `0.81181` to `0.80704`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; warm-up is training-only.
