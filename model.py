@@ -26,7 +26,10 @@ class Model:
             x = self._efficientnet_b0(inputs)
         else:
             raise ValueError(f"unknown backbone: {backbone_name!r}")
-        x = tf.keras.layers.Conv2D(self.cfg.embedding_dim, 1, use_bias=False, kernel_regularizer=self._regularizer(), name="embedding_conv")(x)
+        x = tf.keras.layers.Conv2D(
+            self.cfg.embedding_dim, 1, use_bias=False, activation="tanh",
+            kernel_regularizer=self._regularizer(), name="embedding_conv"
+        )(x)
         outputs = tf.keras.layers.GlobalAveragePooling2D(name="embedding")(x)
         return tf.keras.Model(inputs, outputs, name="reid_model")
 

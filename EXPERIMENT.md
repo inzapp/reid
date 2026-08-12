@@ -256,3 +256,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6947743467933492` → `0.7140736342042755` (`+0.0192992874109263`).
 - Guardrails: Validation loss improved from `-0.5684820413589478` to `-0.5730777978897095`; AUC improved from `0.9875799767000001` to `0.9882387977499999`; EER improved from `0.050350000000000006` to `0.048735`; TAR@FAR1% improved from `0.80583` to `0.81965`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; label smoothing is training-only.
+
+## 2026-08-12 — Bound embedding outputs for stable edge-device quantization
+
+- Parent commit: `00f99f6d33f2868fe424ab00dfb3b569849061b7`.
+- Change: Changed the `embedding_conv` output activation from linear to `tanh`, constraining pre-pooling embedding features to `[-1, 1]` for predictable int8 quantization on the target edge device.
+- Rank-1: `0.6935866983372921` → `0.7081353919239906` (`+0.0145486935866985`) versus the latest equivalent linear-output run; the candidate remained `0.0059382422802849` below the historical best `0.7140736342042755`.
+- Guardrails: Validation loss improved from `-0.5646121501922607` to `-0.5807560682296753`; AUC improved from `0.98780654685` to `0.9881101564500001`; EER improved from `0.04923999999999998` to `0.049229999999999996`; TAR@FAR1% improved from `0.81746` to `0.82956`.
+- Inference cost: Parameter count is unchanged; one bounded `tanh` activation is added to make the embedding range explicit and improve compatibility with int8 edge-device quantization.
