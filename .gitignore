@@ -2,6 +2,5 @@ __pycache__/
 *.py[cod]
 checkpoint/
 *.h5
-EXPERIMENT.md
-codex_experiment_run.sh
+.codex-runs
 .experiment-history.md
