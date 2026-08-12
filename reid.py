@@ -489,7 +489,9 @@ class ReIDTrainer:
                 rank1_gallery_paths)
         return metrics
 
-    def train(self, checkpoint_logs_only=False):
+    def train(self, checkpoint_logs_only=False, should_stop=None):
+        should_stop = should_stop or (lambda: False)
+        interrupted = False
         self.model.summary()
         self.cfg.print_cfg()
         print(f"train: {len(self.train_loader.data_paths)} images, "
@@ -498,6 +500,14 @@ class ReIDTrainer:
         self.train_loader.start()
         try:
             for iteration in range(self.start_iteration, self.cfg.iterations):
+                if should_stop():
+                    interrupted = True
+                    if iteration > self.start_iteration:
+                        path = self._save(iteration)
+                        print(f"termination requested; saved checkpoint: {path}")
+                    else:
+                        print("termination requested before the first iteration")
+                    break
                 self._set_learning_rate(iteration)
                 images, labels = self.train_loader.load()
                 loss, dp, dn, id_loss, id_accuracy = self._train_step(
@@ -515,6 +525,13 @@ class ReIDTrainer:
                         progress += (f" id_loss={id_loss:.4f} "
                                      f"id_acc={id_accuracy:.4f}")
                     print(progress, end=ending, flush=True)
+                if should_stop():
+                    interrupted = True
+                    path = self._save(current)
+                    if not checkpoint_logs_only:
+                        print()
+                    print(f"termination requested; saved checkpoint: {path}")
+                    break
                 if current % 2000 == 0 or current == self.cfg.iterations:
                     self._save(current)
                 if current % self.cfg.checkpoint_interval == 0:
@@ -540,5 +557,9 @@ class ReIDTrainer:
                         self._save(current, best=True, rank1=rank1)
         finally:
             self.train_loader.stop()
+        if interrupted:
+            print("training interrupted safely")
+            return True
         completion_prefix = "" if checkpoint_logs_only else "\n"
         print(f"{completion_prefix}training completed")
+        return False
