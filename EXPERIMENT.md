@@ -240,3 +240,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.690914489311164` → `0.6929928741092637` (`+0.0020783847980997`).
 - Guardrails: Validation loss changed from `-0.5679037570953369` to `-0.5664274096488953`; AUC improved from `0.9869965378500001` to `0.9872017241999999`; EER improved from `0.05254999999999999` to `0.05051000000000003`; TAR@FAR1% changed from `0.81181` to `0.80704`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; warm-up is training-only.
+
+## 2026-08-12 — Mildly reduce horizontal flipping to preserve camera-view cues
+
+- Parent commit: `d239d4119fcea9c8e8d4106dd74b35f30f02f26e`.
+- Change: Reduced `horizontal_flip_probability` from `0.5` to `0.4` for `compact_cnn`.
+- Rank-1: `0.6929928741092637` → `0.6947743467933492` (`+0.0017814726840855`).
+- Guardrails: Validation loss improved from `-0.5664274096488953` to `-0.5684820413589478`; AUC improved from `0.9872017241999999` to `0.9875799767000001`; EER improved from `0.05051000000000003` to `0.050350000000000006`; TAR@FAR1% changed from `0.80704` to `0.80583`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; horizontal flipping is training-only.
