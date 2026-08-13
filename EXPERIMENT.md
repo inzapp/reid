@@ -177,6 +177,14 @@ Append each attempt to `.experiment-history.md` using this format:
 
 Successful experiments are appended here and committed with their code changes.
 
+## 2026-08-13 — Intermediate auxiliary identity-loss weight improves retrieval
+
+- Parent commit: `b92ba13e46ff9c57a907bc264b555893eb2c980b`.
+- Change: Increased `id_classification_loss_weight` from `1.1` to `1.15` for `compact_cnn`.
+- Rank-1: `0.7494061757719715` → `0.7514845605700713` (`+0.0020783847980998`).
+- Guardrails: Validation loss `-0.590678334236145` → `-0.5848798155784607`; AUC `0.9894916789` → `0.98950262365`; EER `0.04435000000000002` → `0.045135`; TAR@FAR1% `0.84607` → `0.84594`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; the auxiliary identity-loss weight is training-only.
+
 ## 2026-08-13 — Slightly raise peak learning rate to improve fixed-budget optimization
 
 - Parent commit: `e47587df8aeeaf093536cac973d2c2037e28343a`.
