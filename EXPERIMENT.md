@@ -312,3 +312,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.7203087885985748` → `0.7235748218527316` (`+0.0032660332541568`).
 - Guardrails: Validation loss changed from `-0.5753517746925354` to `-0.5695644021034241`; AUC changed from `0.9884087196000002` to `0.987807343`; EER changed from `0.04765` to `0.04844000000000002`; TAR@FAR1% changed from `0.83548` to `0.83078`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; label smoothing is training-only.
+
+## 2026-08-13 — Slightly increase crop diversity beyond the accepted setting
+
+- Parent commit: `06523eae90b1931d7cebf1a710bbfd795b49ec47`.
+- Change: Increased `random_crop_padding` from `5` to `6` for `compact_cnn`.
+- Rank-1: `0.7431710213776722` → `0.7494061757719715` (`+0.0062351543942993`).
+- Guardrails: Validation loss improved from `-0.587910532951355` to `-0.590678334236145`; AUC improved from `0.98934361915` to `0.9894916789`; EER changed from `0.04420499999999999` to `0.04435000000000002`; TAR@FAR1% improved from `0.83863` to `0.84607`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; crop padding is training-only.

@@ -46,4 +46,4 @@ evaluation_pair_chunk_size: 8192
 horizontal_flip_probability: 0.4
 random_erasing_probability: 0.25
 color_jitter: 0.0
-random_crop_padding: 5
+random_crop_padding: 6
