@@ -18,7 +18,7 @@ model_name: reid
 backbone: compact_cnn
 optimizer: adam
 lr_policy: cosine
-lr: 0.0012
+lr: 0.00125
 lrf: 0.01
 l2: 0.0002
 warm_up: 2000

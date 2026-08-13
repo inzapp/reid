@@ -185,6 +185,14 @@ Successful experiments are appended here and committed with their code changes.
 - Guardrails: Validation loss `-0.590678334236145` → `-0.5848798155784607`; AUC `0.9894916789` → `0.98950262365`; EER `0.04435000000000002` → `0.045135`; TAR@FAR1% `0.84607` → `0.84594`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; the auxiliary identity-loss weight is training-only.
 
+## 2026-08-13 — Slightly raise peak learning rate for fixed-budget optimization
+
+- Parent commit: `770291b91f4f7527274ddd1ffcdbb097b8323ec6`.
+- Change: Increased `lr` from `0.0012` to `0.00125` for `compact_cnn`.
+- Rank-1: `0.7532660332541568` → `0.7553444180522565` (`+0.0020783847980999`).
+- Guardrails: Validation loss `-0.589799702167511` → `-0.5975998044013977`; AUC `0.98945965385` → `0.9900278329`; EER `0.04449999999999999` → `0.043769999999999996`; TAR@FAR1% `0.85042` → `0.84607`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; the learning rate is training-only.
+
 ## 2026-08-13 — Slightly raise peak learning rate to improve fixed-budget optimization
 
 - Parent commit: `e47587df8aeeaf093536cac973d2c2037e28343a`.
