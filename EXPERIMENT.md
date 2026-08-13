@@ -272,3 +272,12 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.7140736342042755` → `0.7170427553444181` (`+0.0029691211401426`).
 - Guardrails: Validation loss changed from `-0.5730777978897095` to `-0.5716392397880554`; AUC improved from `0.9882387977499999` to `0.98835548975`; EER improved from `0.048735` to `0.04739`; TAR@FAR1% improved from `0.81965` to `0.82668`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; label smoothing is training-only.
+
+## 2026-08-13 — Lengthen warm-up to stabilize early feature representation
+
+- Parent commit: `c815edf5b737ebbdd6087d45c28f59e601f4b05f`.
+- Change: Increased `warm_up` from `1500` to `2000` for `compact_cnn`.
+- Rank-1: `0.7170427553444181` → `0.7203087885985748` (`+0.0032660332541567`).
+- Guardrails: Validation loss improved from `-0.5716392397880554` to `-0.5753517746925354`; AUC improved from `0.98835548975` to `0.9884087196000002`; EER changed from `0.04739` to `0.04765`; TAR@FAR1% improved from `0.82668` to `0.83548`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; warm-up is training-only.
+

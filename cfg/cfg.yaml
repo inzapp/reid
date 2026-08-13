@@ -21,7 +21,7 @@ lr_policy: cosine
 lr: 0.001
 lrf: 0.01
 l2: 0.0002
-warm_up: 1500
+warm_up: 2000
 momentum: 0.9
 
 # PK batch: batch_size must equal identities_per_batch * images_per_identity.
