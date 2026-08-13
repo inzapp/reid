@@ -1,6 +1,6 @@
 # Autonomous experiment policy
 
-This file is the source of truth for autonomous Codex experiments. It is
+This file is the source of truth for autonomous agent experiments. It is
 designed to be copied to other machine-learning repositories. Edit only the
 project-specific configuration section when adapting it to another project.
 
@@ -35,7 +35,7 @@ project explicitly requires a different threshold.
 - `EXPERIMENT.md`: committed rules and accepted experiment history.
 - `.experiment-history.md`: local-only history of attempted, rejected, blocked,
   and inconclusive experiments. It must be ignored by Git and never committed.
-- `.codex-runs/`: local-only Codex execution logs. It must never be committed.
+- `.agent-runs/`: local-only agent execution logs. It must never be committed.
 
 ## Mandatory workflow
 
@@ -120,7 +120,7 @@ experiment.
 - Compare unrounded metric values when available. A displayed rounding change
   alone is not sufficient evidence.
 - One commit represents one successful hypothesis.
-- Do not commit raw checkpoints, datasets, generated models, caches, raw Codex
+- Do not commit raw checkpoints, datasets, generated models, caches, raw agent
   event logs, or `.experiment-history.md`.
 - Include the previous historical-best metric and the new candidate metric in
   the commit message.

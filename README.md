@@ -74,28 +74,28 @@ Every checkpoint directory contains the exact `cfg.yaml` used for that run,
 including `embedding_dim` and `maximum_negative_distance`. Models are saved in
 the HDF5 format with the `.h5` extension.
 
-## Autonomous Codex experiments
+## Autonomous agent experiments
 
 The repository-independent experiment loop is defined by two files:
 
 - `EXPERIMENT.md`: committed project rules and successful experiment history.
-- `codex_experiment_run.sh`: runs bounded Codex experiments directly in the
+- `agent_experiment_run.sh`: runs bounded agent experiments directly in the
   current repository.
 
 Failed and inconclusive attempts are stored only in the ignored local file
-`.experiment-history.md`. Codex reads it before choosing each new hypothesis so
+`.experiment-history.md`. The selected agent reads it before choosing each new hypothesis so
 the same failed experiment is not repeated.
 
 Commit or otherwise remove every tracked and untracked working-tree change,
-make sure Codex CLI is authenticated, and run:
+make sure the selected agent CLI is authenticated, and run:
 
 ```bash
-chmod +x codex_experiment_run.sh
-./codex_experiment_run.sh 10
+chmod +x agent_experiment_run.sh
+./agent_experiment_run.sh 10
 ```
 
 The loop stops after three consecutive runs without an accepted commit. It
 never performs automatic destructive cleanup; if an interrupted agent leaves
 changes, the loop stops for manual inspection. Copy `EXPERIMENT.md` and
-`codex_experiment_run.sh` to another repository and edit only the
+`agent_experiment_run.sh` to another repository and edit only the
 project-specific section of `EXPERIMENT.md`.

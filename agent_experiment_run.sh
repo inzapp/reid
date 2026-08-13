@@ -7,13 +7,16 @@ readonly GIT_DIR="$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir)"
 readonly LOCAL_EXCLUDE="$GIT_DIR/info/exclude"
 readonly POLICY_FILE="$REPO_ROOT/EXPERIMENT.md"
 readonly LOCAL_HISTORY="$REPO_ROOT/.experiment-history.md"
-readonly RUN_ROOT="$REPO_ROOT/.codex-runs"
-readonly RUN_TIMEOUT="${CODEX_EXPERIMENT_TIMEOUT:-8h}"
-readonly LOCK_FILE="${CODEX_EXPERIMENT_LOCK_FILE:-/tmp/codex-experiment-$(basename "$REPO_ROOT").lock}"
+readonly RUN_ROOT="$REPO_ROOT/.agent-runs"
+readonly RUN_TIMEOUT="${AGENT_EXPERIMENT_TIMEOUT:-8h}"
+readonly LOCK_FILE="${AGENT_EXPERIMENT_LOCK_FILE:-/tmp/agent-experiment-$(basename "$REPO_ROOT").lock}"
 
-max_runs="${CODEX_EXPERIMENT_MAX_RUNS:-10}"
-model="${CODEX_EXPERIMENT_MODEL:-gpt-5.6-sol}"
-thinking_level="${CODEX_EXPERIMENT_THINKING_LEVEL:-low}"
+cd "$REPO_ROOT"
+
+max_runs="${AGENT_EXPERIMENT_MAX_RUNS:-10}"
+cli="${AGENT_EXPERIMENT_CLI:-codex}"
+model="${AGENT_EXPERIMENT_MODEL:-}"
+thinking_level="${AGENT_EXPERIMENT_THINKING_LEVEL:-}"
 force_latest_best=false
 run_count_set=false
 
@@ -29,10 +32,11 @@ Usage: $(basename "$0") [OPTIONS] [RUN_COUNT]
   --force-latest-best  Ignore whether the latest accepted metric belongs to
                        HEAD and force the highest Rank-1 in EXPERIMENT.md to
                        be used as the baseline without retraining it.
-  --model MODEL        Codex model (default: gpt-5.6-sol).
+  --cli CLI            Agent CLI: codex or agy (default: codex).
+  --model MODEL        Model (default: gpt-5.6-sol for codex,
+                       gemini-3.6-flash for agy).
   --thinking-level LEVEL
-                       Reasoning effort: none, low, medium, high, xhigh, or max
-                       (default: low).
+                       Reasoning effort (default: low for codex, medium for agy).
   -h, --help           Show this help.
 EOF
 }
@@ -41,6 +45,11 @@ while (($#)); do
     case "$1" in
         --force-latest-best)
             force_latest_best=true
+            ;;
+        --cli)
+            (($# >= 2)) || fail "--cli requires a value"
+            cli="$2"
+            shift
             ;;
         --model)
             (($# >= 2)) || fail "--model requires a value"
@@ -77,8 +86,21 @@ while (($#)); do
     shift
 done
 
+case "$cli" in
+    codex)
+        model="${model:-gpt-5.6-sol}"
+        thinking_level="${thinking_level:-low}"
+        ;;
+    agy)
+        model="${model:-gemini-3.6-flash}"
+        thinking_level="${thinking_level:-medium}"
+        ;;
+    *) fail "cli must be one of: codex, agy" ;;
+esac
+
 readonly MAX_RUNS="$max_runs"
-readonly CODEX_MODEL="$model"
+readonly AGENT_CLI="$cli"
+readonly AGENT_MODEL="$model"
 readonly THINKING_LEVEL="$thinking_level"
 readonly FORCE_LATEST_BEST="$force_latest_best"
 
@@ -93,7 +115,7 @@ handle_interrupt() {
     local repository_status=""
 
     # Prevent a second signal from re-entering this handler while it reports
-    # the state left by the interrupted Codex process.
+    # the state left by the interrupted agent process.
     trap - INT TERM HUP
 
     echo >&2
@@ -182,17 +204,24 @@ meets_minimum_improvement() {
 }
 
 is_positive_integer "$MAX_RUNS" || fail "run count must be a positive integer"
-[[ -n "$CODEX_MODEL" ]] || fail "model must not be empty"
-case "$THINKING_LEVEL" in
-    none|low|medium|high|xhigh|max) ;;
-    *) fail "thinking level must be one of: none, low, medium, high, xhigh, max" ;;
-esac
+[[ -n "$AGENT_MODEL" ]] || fail "model must not be empty"
+if [[ "$AGENT_CLI" == agy ]]; then
+    case "$THINKING_LEVEL" in
+        low|medium|high) ;;
+        *) fail "agy thinking level must be one of: low, medium, high" ;;
+    esac
+else
+    case "$THINKING_LEVEL" in
+        none|low|medium|high|xhigh|max) ;;
+        *) fail "codex thinking level must be one of: none, low, medium, high, xhigh, max" ;;
+    esac
+fi
 [[ -f "$POLICY_FILE" ]] || fail "missing $POLICY_FILE"
 expected_iterations="$(fixed_training_iterations)"
 is_positive_integer "$expected_iterations" \
     || fail "EXPERIMENT.md has no valid fixed training iterations value"
 readonly EXPECTED_ITERATIONS="$expected_iterations"
-command -v codex >/dev/null || fail "codex CLI is not installed"
+command -v "$AGENT_CLI" >/dev/null || fail "$AGENT_CLI CLI is not installed"
 command -v flock >/dev/null || fail "flock is not installed"
 command -v timeout >/dev/null || fail "timeout is not installed"
 command -v setsid >/dev/null || fail "setsid is not installed"
@@ -205,7 +234,7 @@ ensure_local_exclude() {
 }
 
 ensure_local_exclude '/.experiment-history.md'
-ensure_local_exclude '/.codex-runs/'
+ensure_local_exclude '/.agent-runs/'
 
 mkdir -p "$RUN_ROOT"
 if [[ ! -f "$LOCAL_HISTORY" ]]; then
@@ -215,14 +244,15 @@ if [[ ! -f "$LOCAL_HISTORY" ]]; then
 fi
 
 exec 9>"$LOCK_FILE"
-flock -n 9 || fail "another Codex experiment loop is already running"
+flock -n 9 || fail "another experiment loop is already running"
 
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=normal)" ]]; then
     fail "the repository must be completely clean before automation starts"
 fi
 
-echo "Codex experiment configuration:"
-echo "  model: $CODEX_MODEL"
+echo "Experiment configuration:"
+echo "  cli: $AGENT_CLI"
+echo "  model: $AGENT_MODEL"
 echo "  thinking level: $THINKING_LEVEL"
 echo "  runs: $MAX_RUNS"
 echo "  required training iterations: $EXPECTED_ITERATIONS"
@@ -251,13 +281,13 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
     active_event_log="$event_log"
     active_final_log="$final_log"
 
-    echo "[$run/$MAX_RUNS] starting experiment $run_id at ${parent_commit:0:12} (model=$CODEX_MODEL, thinking=$THINKING_LEVEL)"
+    echo "[$run/$MAX_RUNS] starting experiment $run_id at ${parent_commit:0:12} (cli=$AGENT_CLI, model=$AGENT_MODEL, thinking=$THINKING_LEVEL)"
 
-    codex_args=(
+    agent_args=(
         exec
         --cd "$REPO_ROOT"
         --approve-for-me
-        --model "$CODEX_MODEL"
+        --model "$AGENT_MODEL"
         --config "model_reasoning_effort=\"$THINKING_LEVEL\""
         --json
         --output-last-message "$final_log"
@@ -270,7 +300,8 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
         printf -- '- Parent commit: `%s`\n' "$parent_commit"
         printf -- '- Local history: `%s`\n' "$LOCAL_HISTORY"
         printf -- '- Maximum wall time: `%s`\n\n' "$RUN_TIMEOUT"
-        printf -- '- Codex model: `%s`\n' "$CODEX_MODEL"
+        printf -- '- Agent CLI: `%s`\n' "$AGENT_CLI"
+        printf -- '- Agent model: `%s`\n' "$AGENT_MODEL"
         printf -- '- Thinking level: `%s`\n\n' "$THINKING_LEVEL"
         printf -- '- Required completed training iteration: `%s`\n\n' \
             "$EXPECTED_ITERATIONS"
@@ -326,11 +357,21 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
     } >"$prompt_file"
 
     set +e
-    setsid timeout --signal=TERM "$RUN_TIMEOUT" \
-        codex "${codex_args[@]}" - <"$prompt_file" >"$event_log" &
+    if [[ "$AGENT_CLI" == codex ]]; then
+        setsid timeout --signal=TERM "$RUN_TIMEOUT" \
+            codex "${agent_args[@]}" - <"$prompt_file" >"$event_log" &
+    else
+        setsid timeout --signal=TERM "$RUN_TIMEOUT" \
+            agy --print --dangerously-skip-permissions \
+                --model "$AGENT_MODEL" --effort "$THINKING_LEVEL" \
+                --print-timeout "$RUN_TIMEOUT" \
+                --output-format text --log-file "$event_log" \
+                --add-dir "$REPO_ROOT" \
+                <"$prompt_file" >"$final_log" &
+    fi
     active_process_group=$!
     wait "$active_process_group"
-    codex_status=$?
+    agent_status=$?
     active_process_group=""
     set -e
 
@@ -338,13 +379,13 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
     repository_status="$(git -C "$REPO_ROOT" status --porcelain \
         --untracked-files=normal)"
 
-    if (( codex_status != 0 )); then
-        echo "Codex exited with status $codex_status; see $event_log" >&2
+    if (( agent_status != 0 )); then
+        echo "$AGENT_CLI exited with status $agent_status; see $event_log" >&2
         if [[ -n "$repository_status" ]]; then
             fail "the interrupted run left changes; no automatic destructive cleanup was attempted"
         fi
     elif [[ -n "$repository_status" ]]; then
-        fail "Codex left uncommitted changes; inspect them manually (see $final_log)"
+        fail "$AGENT_CLI left uncommitted changes; inspect them manually (see $final_log)"
     elif [[ "$parent_commit" == "$current_commit" ]]; then
         echo "experiment produced no accepted commit; see $final_log"
     else
@@ -360,7 +401,7 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
         fi
         if git -C "$REPO_ROOT" diff --name-only \
                 "$parent_commit..$current_commit" \
-                | grep -Eq '(^|/)(\.experiment-history\.md|\.codex-runs)(/|$)'; then
+                | grep -Eq '(^|/)(\.experiment-history\.md|\.agent-runs)(/|$)'; then
             fail "accepted commit contains a local-only experiment artifact"
         fi
 
@@ -380,4 +421,4 @@ done
 
 echo "repository: $REPO_ROOT"
 echo "local experiment history: $LOCAL_HISTORY"
-echo "Codex run logs: $RUN_ROOT"
+echo "Agent run logs: $RUN_ROOT"

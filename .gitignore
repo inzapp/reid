@@ -2,5 +2,5 @@ __pycache__/
 *.py[cod]
 checkpoint/
 *.h5
-.codex-runs
+.agent-runs/
 .experiment-history.md
