@@ -264,3 +264,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.6935866983372921` → `0.7081353919239906` (`+0.0145486935866985`) versus the latest equivalent linear-output run; the candidate remained `0.0059382422802849` below the historical best `0.7140736342042755`.
 - Guardrails: Validation loss improved from `-0.5646121501922607` to `-0.5807560682296753`; AUC improved from `0.98780654685` to `0.9881101564500001`; EER improved from `0.04923999999999998` to `0.049229999999999996`; TAR@FAR1% improved from `0.81746` to `0.82956`.
 - Inference cost: Parameter count is unchanged; one bounded `tanh` activation is added to make the embedding range explicit and improve compatibility with int8 edge-device quantization.
+
+## 2026-08-13 — Increase identity-label smoothing to regularize identity logits
+
+- Parent commit: `26eb58d7f57442e0bf9cdba591b9c9f5b2803944`.
+- Change: Increased `id_label_smoothing` from `0.15` to `0.20` for `compact_cnn`.
+- Rank-1: `0.7140736342042755` → `0.7170427553444181` (`+0.0029691211401426`).
+- Guardrails: Validation loss changed from `-0.5730777978897095` to `-0.5716392397880554`; AUC improved from `0.9882387977499999` to `0.98835548975`; EER improved from `0.048735` to `0.04739`; TAR@FAR1% improved from `0.81965` to `0.82668`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; label smoothing is training-only.

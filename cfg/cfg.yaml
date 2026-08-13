@@ -30,7 +30,7 @@ identities_per_batch: 32
 images_per_identity: 2
 use_id_classification_loss: true
 id_classification_loss_weight: 1.0
-id_label_smoothing: 0.15
+id_label_smoothing: 0.20
 max_q_size: 256
 num_loader_workers: 4
 iterations: 30000
