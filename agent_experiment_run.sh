@@ -361,13 +361,18 @@ for ((run = 1; run <= MAX_RUNS; run++)); do
         setsid timeout --signal=TERM "$RUN_TIMEOUT" \
             codex "${agent_args[@]}" - <"$prompt_file" >"$event_log" &
     else
+        # Unlike `codex exec -`, `agy --print` does not consume its prompt from
+        # stdin. Without a positional prompt it silently sends a built-in
+        # greeting, so load the generated prompt and pass it explicitly.
+        agent_prompt="$(<"$prompt_file")"
+        [[ -n "$agent_prompt" ]] || fail "generated agent prompt is empty"
         setsid timeout --signal=TERM "$RUN_TIMEOUT" \
             agy --print --dangerously-skip-permissions \
                 --model "$AGENT_MODEL" --effort "$THINKING_LEVEL" \
                 --print-timeout "$RUN_TIMEOUT" \
                 --output-format text --log-file "$event_log" \
                 --add-dir "$REPO_ROOT" \
-                <"$prompt_file" >"$final_log" &
+                "$agent_prompt" >"$final_log" &
     fi
     active_process_group=$!
     wait "$active_process_group"
