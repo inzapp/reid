@@ -177,6 +177,14 @@ Append each attempt to `.experiment-history.md` using this format:
 
 Successful experiments are appended here and committed with their code changes.
 
+## 2026-08-13 — Slightly increase crop diversity for cross-camera retrieval
+
+- Parent commit: `f6096326ba8532ac4ccb120256408ef94b930d43`.
+- Change: Increased `random_crop_padding` from `4` to `5` for `compact_cnn`.
+- Rank-1: `0.7235748218527316` → `0.7250593824228029` (`+0.0014845605700713`).
+- Guardrails: Validation loss improved from `-0.5695644021034241` to `-0.582276463508606`; AUC improved from `0.987807343` to `0.9887191663999999`; EER improved from `0.04844000000000002` to `0.046900000000000025`; TAR@FAR1% improved from `0.83078` to `0.83966`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; crop padding is training-only.
+
 ## 2026-08-11 — Reduce random-crop padding to preserve identity cues
 
 - Parent commit: `a5630157b32484748350453a0c0e5f63a0679ace`
