@@ -281,3 +281,10 @@ Successful experiments are appended here and committed with their code changes.
 - Guardrails: Validation loss improved from `-0.5716392397880554` to `-0.5753517746925354`; AUC improved from `0.98835548975` to `0.9884087196000002`; EER changed from `0.04739` to `0.04765`; TAR@FAR1% improved from `0.82668` to `0.83548`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; warm-up is training-only.
 
+## 2026-08-13 — Finely increase identity-label smoothing to improve generalization
+
+- Parent commit: `de79c91682567dd9943ac6909c469226f8c0c7b3`.
+- Change: Increased `id_label_smoothing` from `0.20` to `0.22` for `compact_cnn`.
+- Rank-1: `0.7203087885985748` → `0.7235748218527316` (`+0.0032660332541568`).
+- Guardrails: Validation loss changed from `-0.5753517746925354` to `-0.5695644021034241`; AUC changed from `0.9884087196000002` to `0.987807343`; EER changed from `0.04765` to `0.04844000000000002`; TAR@FAR1% changed from `0.83548` to `0.83078`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; label smoothing is training-only.
