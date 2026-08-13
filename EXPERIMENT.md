@@ -185,6 +185,14 @@ Successful experiments are appended here and committed with their code changes.
 - Guardrails: Validation loss improved from `-0.582276463508606` to `-0.5948601365089417`; AUC improved from `0.9887191663999999` to `0.9901649407499999`; EER improved from `0.046900000000000025` to `0.04357999999999998`; TAR@FAR1% improved from `0.83966` to `0.84332`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; the learning rate is training-only.
 
+## 2026-08-13 — Slightly increase auxiliary identity-loss weight to strengthen embedding supervision
+
+- Parent commit: `c1f9c5b7734eca8745fbb9ed151ffa98b479e877`.
+- Change: Increased `id_classification_loss_weight` from `1.0` to `1.1` for `compact_cnn`.
+- Rank-1: `0.7330760095011877` → `0.7431710213776722` (`+0.0100950118764845`).
+- Guardrails: Validation loss changed from `-0.5948601365089417` to `-0.587910532951355`; AUC changed from `0.9901649407499999` to `0.98934361915`; EER changed from `0.04357999999999998` to `0.04420499999999999`; TAR@FAR1% changed from `0.84332` to `0.83863`. Guardrails remained acceptable.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; the auxiliary identity-loss weight is training-only.
+
 ## 2026-08-13 — Slightly increase crop diversity for cross-camera retrieval
 
 - Parent commit: `f6096326ba8532ac4ccb120256408ef94b930d43`.
