@@ -328,3 +328,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.7431710213776722` → `0.7494061757719715` (`+0.0062351543942993`).
 - Guardrails: Validation loss improved from `-0.587910532951355` to `-0.590678334236145`; AUC improved from `0.98934361915` to `0.9894916789`; EER changed from `0.04420499999999999` to `0.04435000000000002`; TAR@FAR1% improved from `0.83863` to `0.84607`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; crop padding is training-only.
+
+## 2026-08-13 — Slightly strengthen auxiliary identity supervision
+
+- Parent commit: `ffdf70e57ba5d12cc412dd1f89049e94f89ed4f3`.
+- Change: Increased `id_classification_loss_weight` from `1.15` to `1.20` for `compact_cnn`.
+- Rank-1: `0.7514845605700713` → `0.7532660332541568` (`+0.0017814726840855`).
+- Guardrails: Validation loss `-0.5848798155784607` → `-0.589799702167511`; AUC `0.98950262365` → `0.98945965385`; EER `0.045135` → `0.04449999999999999`; TAR@FAR1% `0.84594` → `0.85042`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; the auxiliary identity-loss weight is training-only.
