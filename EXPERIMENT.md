@@ -177,6 +177,14 @@ Append each attempt to `.experiment-history.md` using this format:
 
 Successful experiments are appended here and committed with their code changes.
 
+## 2026-08-13 — Slightly raise peak learning rate to improve fixed-budget optimization
+
+- Parent commit: `e47587df8aeeaf093536cac973d2c2037e28343a`.
+- Change: Increased `lr` from `0.001` to `0.0012` for `compact_cnn`.
+- Rank-1: `0.7250593824228029` → `0.7330760095011877` (`+0.0080166270783848`).
+- Guardrails: Validation loss improved from `-0.582276463508606` to `-0.5948601365089417`; AUC improved from `0.9887191663999999` to `0.9901649407499999`; EER improved from `0.046900000000000025` to `0.04357999999999998`; TAR@FAR1% improved from `0.83966` to `0.84332`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; the learning rate is training-only.
+
 ## 2026-08-13 — Slightly increase crop diversity for cross-camera retrieval
 
 - Parent commit: `f6096326ba8532ac4ccb120256408ef94b930d43`.
