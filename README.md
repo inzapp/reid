@@ -61,6 +61,13 @@ after excluding gallery images with the same identity and camera as the query.
 Rank-1 and pair-verification metrics both use only IDs greater than zero, so ID
 `0000` distractors and negative-ID junk are excluded from the gallery.
 
+Evaluation also reports `quantized_market1501_rank1`. This score quantizes
+both query and gallery embeddings to symmetric int8 with the fixed scale
+`1/127`, then dequantizes them to float32 before performing the same
+query-gallery search. The fixed scale matches the embedding head's tanh output
+range of `[-1, 1]`. The regular `market1501_rank1` remains the primary metric
+used for best-checkpoint selection.
+
 The best checkpoint is selected by the highest validation Rank-1 score and is
 named with a `_rank1_<score>` suffix. Consequently, `query_data_path` is required
 during training.

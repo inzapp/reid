@@ -329,6 +329,21 @@ class ReIDTrainer:
             batches.append(self.model(images, training=False).numpy())
         return np.concatenate(batches, axis=0)
 
+    @staticmethod
+    def _quantize_dequantize_embeddings(embeddings):
+        """Round tanh-bounded embeddings through a symmetric int8 tensor.
+
+        The embedding head uses tanh, so its output range is [-1, 1]. A fixed
+        scale makes query and gallery vectors use the same quantization
+        parameters, matching a statically calibrated edge-device tensor.
+        Values outside the expected range are clipped rather than allowing
+        integer overflow.
+        """
+        embeddings = np.asarray(embeddings, dtype=np.float32)
+        quantized = np.clip(
+            np.rint(embeddings * 127.0), -127, 127).astype(np.int8)
+        return quantized.astype(np.float32) / 127.0
+
     def _query_paths(self):
         if self.cfg.query_data_path is None:
             return []
@@ -487,6 +502,13 @@ class ReIDTrainer:
             metrics["market1501_rank1"] = self._market1501_rank1(
                 query_embeddings, query_paths, rank1_gallery_embeddings,
                 rank1_gallery_paths)
+            quantized_query_embeddings = self._quantize_dequantize_embeddings(
+                query_embeddings)
+            quantized_gallery_embeddings = self._quantize_dequantize_embeddings(
+                rank1_gallery_embeddings)
+            metrics["quantized_market1501_rank1"] = self._market1501_rank1(
+                quantized_query_embeddings, query_paths,
+                quantized_gallery_embeddings, rank1_gallery_paths)
         return metrics
 
     def train(self, checkpoint_logs_only=False, should_stop=None):
@@ -542,7 +564,11 @@ class ReIDTrainer:
                     if rank1 is None:
                         raise ValueError(
                             "query_data_path is required for Rank-1 checkpoint selection")
+                    quantized_rank1 = metrics.get("quantized_market1501_rank1")
                     rank1_log = f" Rank-1={rank1:.4f}"
+                    if quantized_rank1 is not None:
+                        rank1_log += (
+                            f" Quantized-Rank-1={quantized_rank1:.4f}")
                     validation_prefix = "" if checkpoint_logs_only else "\n"
                     print(f"{validation_prefix}validation loss={validation_loss:.4f} "
                           f"d_pos={metrics['positive_mean_distance']:.4f} "
