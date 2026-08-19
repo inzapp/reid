@@ -235,6 +235,9 @@ ensure_local_exclude() {
 
 ensure_local_exclude '/.experiment-history.md'
 ensure_local_exclude '/.agent-runs/'
+# `nohup ./agent_experiment_run.sh ... &` creates this file in the repository
+# before the runner checks that the working tree is clean.
+ensure_local_exclude '/nohup.out'
 
 mkdir -p "$RUN_ROOT"
 if [[ ! -f "$LOCAL_HISTORY" ]]; then
