@@ -33,7 +33,7 @@ Usage: $(basename "$0") [OPTIONS] [RUN_COUNT]
                        HEAD and force the highest Rank-1 in EXPERIMENT.md to
                        be used as the baseline without retraining it.
   --cli CLI            Agent CLI: codex or agy (default: codex).
-  --model MODEL        Model (default: luna for codex,
+  --model MODEL        Model (default: gpt-5.6-luna for codex,
                        gemini-3.6-flash for agy).
   --thinking-level LEVEL
                        Reasoning effort (default: medium for codex and agy).
@@ -88,7 +88,7 @@ done
 
 case "$cli" in
     codex)
-        model="${model:-luna}"
+        model="${model:-gpt-5.6-luna}"
         thinking_level="${thinking_level:-medium}"
         ;;
     agy)
