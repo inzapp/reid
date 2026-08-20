@@ -39,7 +39,7 @@ class Model:
             x = tf.keras.layers.Conv2D(
                 filters, 3, strides=2, padding="same", use_bias=True,
                 kernel_regularizer=self._regularizer())(x)
-            x = tf.keras.layers.LeakyReLU(alpha=0.15)(x)
+            x = tf.keras.layers.LeakyReLU(alpha=0.20)(x)
         return x
 
     def _mobilenet_v2(self, inputs):

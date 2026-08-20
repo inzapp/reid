@@ -352,3 +352,11 @@ Successful experiments are appended here and committed with their code changes.
 - Rank-1: `0.7553444180522565` → `0.7577197149643705` (`+0.0023752969121140`).
 - Guardrails: Validation loss `-0.5814389586448669`; AUC `0.9900328809`; EER `0.04193000000000001`; TAR@FAR1% `0.85049`; quantized Rank-1 `0.754750593824228`.
 - Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; only the LeakyReLU negative slope changed.
+
+## 2026-08-20 — Further increase compact-backbone negative activation retention
+
+- Parent commit: `8e7b643b8b0b0a6e1834ba47a9adf1838e908769`.
+- Change: Increased the compact CNN LeakyReLU negative slope from `0.15` to `0.20`.
+- Rank-1: `0.7577197149643705` → `0.7642517814726841` (`+0.0065320665083136`).
+- Guardrails: Validation loss `-0.570866584777832`; AUC `0.9899943749000003`; EER `0.04435`; TAR@FAR1% `0.8513`; quantized Rank-1 `0.7642517814726841`.
+- Inference cost: Unchanged at `1,830,720` parameters and unchanged operations; only the LeakyReLU negative slope changed.
